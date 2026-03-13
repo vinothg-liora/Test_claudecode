@@ -14,6 +14,75 @@
     const PAGE_SIZE = 25;
     let charts = {};
 
+    // ── Persistence ──
+    const STORAGE_DATA_KEY = 'liora_cf_data';
+    const STORAGE_FILES_KEY = 'liora_cf_files';
+
+    function saveToStorage() {
+        try {
+            const serializable = rawData.map(r => ({
+                ...r,
+                date: r.date ? r.date.toISOString() : null,
+            }));
+            localStorage.setItem(STORAGE_DATA_KEY, JSON.stringify(serializable));
+        } catch (e) {
+            console.warn('Impossible de sauvegarder dans localStorage:', e.message);
+        }
+    }
+
+    function loadFromStorage() {
+        try {
+            const json = localStorage.getItem(STORAGE_DATA_KEY);
+            if (!json) return [];
+            const arr = JSON.parse(json);
+            return arr.map(r => ({
+                ...r,
+                date: r.date ? new Date(r.date) : new Date(0),
+            }));
+        } catch {
+            return [];
+        }
+    }
+
+    function getFileHistory() {
+        try {
+            const json = localStorage.getItem(STORAGE_FILES_KEY);
+            return json ? JSON.parse(json) : [];
+        } catch { return []; }
+    }
+
+    function addFileHistory(name, rowCount) {
+        const history = getFileHistory();
+        history.push({ name, rowCount, date: new Date().toISOString() });
+        try { localStorage.setItem(STORAGE_FILES_KEY, JSON.stringify(history)); } catch {}
+    }
+
+    function clearAllHistory() {
+        localStorage.removeItem(STORAGE_DATA_KEY);
+        localStorage.removeItem(STORAGE_FILES_KEY);
+    }
+
+    /** Deduplicate: two rows are considered the same if date+libelle+montant+tiers match */
+    function deduplicateKey(r) {
+        const d = r.date && !isNaN(r.date.getTime()) ? r.date.toISOString().slice(0, 10) : '';
+        return d + '|' + (r.libelle || '') + '|' + r.montant + '|' + (r.tiers || '');
+    }
+
+    function mergeData(existingData, newData) {
+        const seen = new Set(existingData.map(deduplicateKey));
+        let added = 0;
+        for (const row of newData) {
+            const key = deduplicateKey(row);
+            if (!seen.has(key)) {
+                existingData.push(row);
+                seen.add(key);
+                added++;
+            }
+        }
+        existingData.sort((a, b) => a.date - b.date);
+        return added;
+    }
+
     // ── DOM References ──
     const $ = (sel) => document.querySelector(sel);
     const $$ = (sel) => document.querySelectorAll(sel);
@@ -459,7 +528,7 @@
                 skipEmptyLines: true,
                 encoding: 'UTF-8',
                 complete: (result) => {
-                    setTimeout(() => parseAndAnalyze(result.data, result.meta.fields), 500);
+                    setTimeout(() => parseAndAnalyze(result.data, result.meta.fields, file.name), 500);
                 },
                 error: () => {
                     alert('Erreur lors de la lecture du fichier CSV.');
@@ -474,7 +543,7 @@
                     const sheet = workbook.Sheets[workbook.SheetNames[0]];
                     const json = XLSX.utils.sheet_to_json(sheet, { defval: '' });
                     const headers = json.length > 0 ? Object.keys(json[0]) : [];
-                    setTimeout(() => parseAndAnalyze(json, headers), 500);
+                    setTimeout(() => parseAndAnalyze(json, headers, file.name), 500);
                 } catch {
                     alert('Erreur lors de la lecture du fichier Excel.');
                     showScreen('upload');
@@ -484,11 +553,11 @@
         }
     }
 
-    function parseAndAnalyze(data, headers) {
+    function parseAndAnalyze(data, headers, fileName) {
         $('#loader-status').textContent = 'Analyse des données...';
 
         const colMap = mapColumns(headers);
-        rawData = data.map((row) => {
+        const newRows = data.map((row) => {
             const montantRaw = row[colMap.montant] || '0';
             const montant = parseFloat(
                 String(montantRaw).replace(/\s/g, '').replace(',', '.')
@@ -515,25 +584,38 @@
                 projets: row[colMap.projets] || '',
                 titulaire: row[colMap.titulaire] || '',
                 nom_carte: row[colMap.nom_carte] || '',
-                // Will be filled by categorizeAll
                 categorie: '',
                 ruleHit: '',
                 sens: '',
             };
         });
 
-        // Sort by date
-        rawData.sort((a, b) => a.date - b.date);
+        // Merge with existing historical data
+        const existingData = loadFromStorage();
+        if (existingData.length > 0) {
+            // Re-categorize existing data is not needed — already done
+            rawData = existingData;
+        } else {
+            rawData = [];
+        }
 
-        // Run categorization engine
+        const added = mergeData(rawData, newRows);
+
+        // Run categorization on ALL data (re-run ensures consistency)
         $('#loader-status').textContent = 'Catégorisation des transactions...';
         setTimeout(() => {
             categorizeAll(rawData);
+
+            // Save merged data + file history
+            saveToStorage();
+            addFileHistory(fileName || 'fichier', newRows.length);
+
             filteredData = [...rawData];
 
-            $('#loader-status').textContent = 'Génération du tableau de bord...';
+            $('#loader-status').textContent = `Génération du tableau de bord... (${added} nouvelles lignes ajoutées)`;
             setTimeout(() => {
                 buildDashboard();
+                renderFileHistory();
                 showScreen('dashboard');
             }, 400);
         }, 300);
@@ -1150,8 +1232,19 @@
         return (...args) => { clearTimeout(timer); timer = setTimeout(() => fn(...args), ms); };
     }
 
-    // ── New File Button ──
+    // ── New File Button (keeps historical data) ──
     $('#btn-new-file').addEventListener('click', () => {
+        currentPage = 1;
+        fileInput.value = '';
+        $('#file-info').classList.add('hidden');
+        window._selectedFile = null;
+        showScreen('upload');
+    });
+
+    // ── Clear All History Button ──
+    $('#btn-clear-history').addEventListener('click', () => {
+        if (!confirm('Supprimer tout l\'historique des données importées ?')) return;
+        clearAllHistory();
         rawData = [];
         filteredData = [];
         currentPage = 1;
@@ -1159,11 +1252,52 @@
         fileInput.value = '';
         $('#file-info').classList.add('hidden');
         window._selectedFile = null;
+        renderFileHistory();
         showScreen('upload');
     });
 
     // ── Export ──
     $('#btn-export').addEventListener('click', () => { window.print(); });
+
+    // ── File History Rendering ──
+    function renderFileHistory() {
+        const container = $('#file-history');
+        if (!container) return;
+        const history = getFileHistory();
+        if (history.length === 0) {
+            container.classList.add('hidden');
+            return;
+        }
+        container.classList.remove('hidden');
+        let html = '<h4 class="history-title">Fichiers importés</h4><div class="history-list">';
+        history.forEach((f, i) => {
+            const d = new Date(f.date);
+            const dateStr = d.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+            html += `<div class="history-item">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                <span class="history-name">${escapeHtml(f.name)}</span>
+                <span class="history-meta">${f.rowCount} lignes — ${dateStr}</span>
+            </div>`;
+        });
+        html += '</div>';
+        container.innerHTML = html;
+    }
+
+    // ── Auto-load from localStorage on startup ──
+    (function autoLoad() {
+        const stored = loadFromStorage();
+        if (stored.length > 0) {
+            rawData = stored;
+            // Re-run categorization to ensure consistency
+            categorizeAll(rawData);
+            filteredData = [...rawData];
+            buildDashboard();
+            renderFileHistory();
+            showScreen('dashboard');
+        } else {
+            renderFileHistory();
+        }
+    })();
 
     // ── Mouse glow ──
     document.addEventListener('mousemove', (e) => {

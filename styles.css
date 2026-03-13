@@ -819,6 +819,69 @@ body::before {
     cursor: pointer;
 }
 
+/* File History Panel */
+.file-history {
+    background: var(--card-bg, rgba(26, 20, 40, 0.6));
+    border: 1px solid rgba(139, 92, 246, 0.12);
+    border-radius: 12px;
+    padding: 1rem 1.25rem;
+    margin-bottom: 1.5rem;
+}
+.history-title {
+    color: var(--text-secondary, #a5a0b8);
+    font-size: 0.8rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin: 0 0 0.75rem 0;
+}
+.history-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+.history-item {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    background: rgba(139, 92, 246, 0.08);
+    border: 1px solid rgba(139, 92, 246, 0.15);
+    border-radius: 8px;
+    padding: 0.4rem 0.75rem;
+    color: var(--text-secondary, #a5a0b8);
+    font-size: 0.8rem;
+}
+.history-item svg {
+    flex-shrink: 0;
+    color: var(--purple-400, #a78bfa);
+}
+.history-name {
+    color: var(--text-primary, #f1f0f5);
+    font-weight: 500;
+}
+.history-meta {
+    color: var(--text-muted, #6b6580);
+    font-size: 0.75rem;
+    margin-left: 0.25rem;
+}
+
+/* Danger button */
+.btn-danger {
+    color: #f87171 !important;
+}
+.btn-danger:hover {
+    background: rgba(239, 68, 68, 0.1) !important;
+    color: #ef4444 !important;
+}
+
+/* Upload persist hint */
+.upload-hint-persist {
+    color: var(--purple-400, #a78bfa);
+    font-size: 0.8rem;
+    margin-top: 0.5rem;
+    font-style: italic;
+}
+
 .table-pagination {
     display: flex;
     align-items: center;
