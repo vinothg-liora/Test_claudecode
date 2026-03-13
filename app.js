@@ -428,6 +428,28 @@
                 row.ruleHit = 'Post-fix: FF (PID PENNYLANE)';
             }
         });
+
+        // Step 4: Type Financeur (enc only) — from DAX formula
+        const INTERCO_FIN_KEYS = ['TRESO','TRESORERIE','AFORSSIC','FORSSIC','VIREMENT COMPENSE','DST GERMANY','APPRO','COMPTE PRO','PRELEVEMENT AUTOMATIQUE'];
+        const PUBLIC_FIN_KEYS = ['OPCO','TRANSITIONS PRO','CAISSE DES DEPOTS','CPF','POLE EMPLOI','REGION','FRANCE TRAVAIL','VILLE','COMMUNE','METROPOLE'];
+        const PUBLIC_CATS = new Set(['Alternance (OPCO)', 'CPF', 'Reconversion']);
+
+        data.forEach(row => {
+            if (row.sens !== 'Encaissement') { row.typeFinanceur = ''; return; }
+            const lib = row._libNorm;
+            // 1. Interco (prioritaire)
+            if (containsAnyDual(lib, INTERCO_FIN_KEYS) || row.categorie === 'Interco') {
+                row.typeFinanceur = 'Interco';
+                return;
+            }
+            // 2. Public
+            if (containsAnyDual(lib, PUBLIC_FIN_KEYS) || PUBLIC_CATS.has(row.categorie)) {
+                row.typeFinanceur = 'Public';
+                return;
+            }
+            // 3. Privé (par défaut)
+            row.typeFinanceur = 'Privé';
+        });
     }
 
     // ══════════════════════════════════════════════
@@ -587,6 +609,7 @@
                 categorie: '',
                 ruleHit: '',
                 sens: '',
+                typeFinanceur: '',
             };
         });
 
@@ -650,6 +673,7 @@
         month: null,       // 'YYYY-MM' from flow chart click
         months: null,      // Set of 'YYYY-MM' from date filter bar (null = all selected)
         equipe: null,      // from teams chart click
+        financeur: null,   // 'Interco', 'Public', 'Privé' from financeur chart
         search: '',        // from search input
         typeDropdown: '',  // from type select
         teamDropdown: '',  // from team select
@@ -667,6 +691,7 @@
             if (crossFilter.sens && r.sens !== crossFilter.sens) return false;
             if (crossFilter.month && getMonthKey(r) !== crossFilter.month) return false;
             if (crossFilter.months && !crossFilter.months.has(getMonthKey(r))) return false;
+            if (crossFilter.financeur && r.typeFinanceur !== crossFilter.financeur) return false;
             if (crossFilter.equipe) {
                 const team = r.equipe && r.equipe.trim() ? r.equipe.trim() : 'Non attribué';
                 if (team !== crossFilter.equipe) return false;
@@ -698,12 +723,13 @@
         crossFilter.sens = null;
         crossFilter.month = null;
         crossFilter.equipe = null;
+        crossFilter.financeur = null;
         // Note: months (date bar) is NOT cleared by "Tout effacer" — it's a separate persistent filter
         refreshDashboard();
     }
 
     function hasCrossFilters() {
-        return crossFilter.categorie || crossFilter.sens || crossFilter.month || crossFilter.equipe;
+        return crossFilter.categorie || crossFilter.sens || crossFilter.month || crossFilter.equipe || crossFilter.financeur;
     }
 
     function renderFilterChips() {
@@ -714,10 +740,10 @@
         }
         container.classList.remove('hidden');
 
-        const labels = { categorie: 'Catégorie', sens: 'Sens', month: 'Mois', equipe: 'Équipe' };
+        const labels = { categorie: 'Catégorie', sens: 'Sens', month: 'Mois', equipe: 'Équipe', financeur: 'Financeur' };
         let html = '<span class="filter-chip-label">Filtres actifs :</span>';
 
-        for (const key of ['categorie', 'sens', 'month', 'equipe']) {
+        for (const key of ['categorie', 'sens', 'month', 'equipe', 'financeur']) {
             if (!crossFilter[key]) continue;
             let display = crossFilter[key];
             if (key === 'month') {
@@ -829,6 +855,8 @@
         renderCumulativeChart();
         renderEncCategoriesChart();
         renderDecCategoriesChart();
+        renderFinanceurChart();
+        renderFinanceurMonthlyChart();
         renderTopVendorsChart();
         renderTeamsChart();
         renderTable();
@@ -1048,6 +1076,107 @@
                     if (!elements.length) return;
                     const label = data.labels[elements[0].index];
                     toggleCrossFilter('categorie', label);
+                },
+            },
+        });
+    }
+
+    // ── Type Financeur Chart (enc only) — Interco / Public / Privé ──
+    const FINANCEUR_COLORS = {
+        'Interco': '#f59e0b',  // amber
+        'Public': '#3b82f6',   // blue
+        'Privé': '#10b981',    // green
+    };
+
+    function renderFinanceurChart() {
+        const financeurs = {};
+        filteredData.filter(r => r.sens === 'Encaissement' && r.typeFinanceur).forEach(r => {
+            financeurs[r.typeFinanceur] = (financeurs[r.typeFinanceur] || 0) + r.montant;
+        });
+
+        const order = ['Interco', 'Public', 'Privé'];
+        const sorted = order.filter(k => financeurs[k]).map(k => [k, financeurs[k]]);
+
+        destroyChart('financeur');
+        if (sorted.length === 0) {
+            const canvas = $('#chart-financeur');
+            if (canvas) canvas.getContext('2d').clearRect(0, 0, 9999, 9999);
+            return;
+        }
+        const ctx = $('#chart-financeur').getContext('2d');
+
+        charts.financeur = new Chart(ctx, {
+            type: 'doughnut',
+            data: {
+                labels: sorted.map(([k]) => k),
+                datasets: [{
+                    data: sorted.map(([, v]) => v),
+                    backgroundColor: sorted.map(([k]) => FINANCEUR_COLORS[k] || '#8b5cf6'),
+                    borderColor: '#1a1428',
+                    borderWidth: 2,
+                    hoverOffset: 6,
+                }],
+            },
+            options: {
+                ...getDoughnutOptions(),
+                onClick: (evt, elements) => {
+                    if (!elements.length) return;
+                    const label = sorted[elements[0].index][0];
+                    toggleCrossFilter('financeur', label);
+                },
+            },
+        });
+    }
+
+    // ── Financeur Monthly stacked bar chart ──
+    function renderFinanceurMonthlyChart() {
+        const months = {};
+        // Collect all months from rawData for consistent x-axis
+        rawData.forEach(r => {
+            if (!r.date || isNaN(r.date.getTime())) return;
+            const mk = getMonthKey(r);
+            if (!months[mk]) months[mk] = { Interco: 0, Public: 0, 'Privé': 0 };
+        });
+        // Fill from filteredData (enc only)
+        filteredData.filter(r => r.sens === 'Encaissement' && r.typeFinanceur).forEach(r => {
+            const mk = getMonthKey(r);
+            if (mk && months[mk]) months[mk][r.typeFinanceur] += r.montant;
+        });
+
+        const keys = Object.keys(months).sort();
+        const labels = keys.map(k => {
+            const [y, m] = k.split('-');
+            return new Date(+y, +m - 1).toLocaleDateString('fr-FR', { month: 'short', year: '2-digit' });
+        });
+
+        destroyChart('financeurMonthly');
+        const ctx = $('#chart-financeur-monthly').getContext('2d');
+        const defaults = getChartDefaults();
+
+        charts.financeurMonthly = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels,
+                datasets: [
+                    { label: 'Interco', data: keys.map(k => months[k].Interco), backgroundColor: FINANCEUR_COLORS.Interco, borderRadius: 3 },
+                    { label: 'Public', data: keys.map(k => months[k].Public), backgroundColor: FINANCEUR_COLORS.Public, borderRadius: 3 },
+                    { label: 'Privé', data: keys.map(k => months[k]['Privé']), backgroundColor: FINANCEUR_COLORS['Privé'], borderRadius: 3 },
+                ],
+            },
+            options: {
+                ...defaults,
+                scales: {
+                    ...defaults.scales,
+                    x: { ...defaults.scales.x, stacked: true },
+                    y: { ...defaults.scales.y, stacked: true },
+                },
+                plugins: {
+                    ...defaults.plugins,
+                    legend: { ...defaults.plugins.legend, labels: { ...defaults.plugins.legend.labels, color: '#a5a0b8' } },
+                },
+                onClick: (evt, elements) => {
+                    if (!elements.length) return;
+                    toggleCrossFilter('month', keys[elements[0].index]);
                 },
             },
         });
