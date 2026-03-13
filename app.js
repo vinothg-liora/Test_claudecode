@@ -350,6 +350,13 @@
             row._tiersNorm = tiersNorm;
             row.sens = row.montant > 0 ? 'Encaissement' : (row.montant < 0 ? 'Décaissement' : 'Neutre');
 
+            // Skip manually reclassified rows
+            if (row.manualCategory) {
+                row.categorie = row.manualCategory;
+                row.ruleHit = 'DQ: Reclassement manuel';
+                return;
+            }
+
             if (row.sens === 'Encaissement') {
                 const [cat, rule] = categoriseEnc(libNorm, tiersNorm);
                 row.categorie = cat;
@@ -368,6 +375,7 @@
         const formsRe = /\b(SAS|SARL|EURL|SA)\b/;
         const excRe = /GOCARDLESS\s+SAS/;
         data.forEach(row => {
+            if (row.manualCategory) return;
             if (row.sens === 'Encaissement' && formsRe.test(row._libNorm) && !excRe.test(row._libNorm)) {
                 row.categorie = 'B2B';
                 row.ruleHit = 'Enc: Anti-reg formes juridiques';
@@ -378,7 +386,7 @@
         const PRIORITY_CATS = new Set(['Interco', 'Alternance (OPCO)', 'CPF', 'Reconversion']);
 
         data.forEach(row => {
-            // Interco prioritaire si "TRESO" dans libellé
+            if (row.manualCategory) return;
             if (row._libNorm.includes('TRESO')) {
                 row.categorie = 'Interco';
                 row.ruleHit = 'Post-fix: Interco (TRESO in Libelle)';
@@ -386,7 +394,7 @@
         });
 
         data.forEach(row => {
-            // B2C si CA CONSUMER FINANCE (enc only)
+            if (row.manualCategory) return;
             if (row.sens === 'Encaissement' && row._libNorm.includes('CA CONSUMER FINANCE')) {
                 row.categorie = 'B2C';
                 row.ruleHit = 'Post-fix: B2C (CA CONSUMER FINANCE)';
@@ -394,7 +402,7 @@
         });
 
         data.forEach(row => {
-            // Marketing & Acquisition si Google/AdWords (dec only)
+            if (row.manualCategory) return;
             if (row.sens === 'Décaissement' &&
                 (row._libNorm.includes('GOOGLE IRELAND') || row._libNorm.includes('ADWORDS') || row._libNorm.includes('GOOGLE *ADS'))) {
                 row.categorie = 'Marketing & Acquisition';
@@ -403,7 +411,7 @@
         });
 
         data.forEach(row => {
-            // B2B enc — nouveaux marqueurs (ne pas écraser Interco/OPCO/CPF/Reconversion)
+            if (row.manualCategory) return;
             if (row.sens === 'Encaissement' && !PRIORITY_CATS.has(row.categorie)) {
                 const libUp = String(row._libNorm).toUpperCase();
                 if (B2B_EXTRA.some(k => libUp.includes(k.toUpperCase()))) {
@@ -414,7 +422,7 @@
         });
 
         data.forEach(row => {
-            // SaaS/IT — ONLINEFORMAPRO
+            if (row.manualCategory) return;
             if (row._libNorm.includes('ONLINEFORMAPRO')) {
                 row.categorie = 'SaaS/IT';
                 row.ruleHit = 'Post-fix: SaaS/IT (ONLINEFORMAPRO)';
@@ -422,7 +430,7 @@
         });
 
         data.forEach(row => {
-            // Formateurs / Freelances — PID PENNYLANE
+            if (row.manualCategory) return;
             if (FF_REGEX_PID_PENNYLANE.test(row._libNorm)) {
                 row.categorie = 'Formateurs / Freelances';
                 row.ruleHit = 'Post-fix: FF (PID PENNYLANE)';
@@ -1679,6 +1687,103 @@
             renderFileHistory();
         }
     })();
+
+    // ══════════════════════════════════════════════
+    //  TAB NAVIGATION
+    // ══════════════════════════════════════════════
+
+    $$('.nav-tab').forEach(btn => {
+        btn.addEventListener('click', () => {
+            $$('.nav-tab').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            $$('.tab-content').forEach(tc => tc.classList.remove('active'));
+            const target = document.getElementById('tab-' + btn.dataset.tab);
+            if (target) target.classList.add('active');
+            if (btn.dataset.tab === 'dataquality') renderDataQuality();
+        });
+    });
+
+    // ══════════════════════════════════════════════
+    //  DATA QUALITY TAB
+    // ══════════════════════════════════════════════
+
+    const DEC_CATEGORIES = [
+        'Interco', 'Banques/Dettes', 'Taxe sur les salaires', 'Prélèvement à la source (PAS)',
+        'Frais généraux & services', 'Note de frais', 'Prévoyance / Mutuelle', 'Ticket restaurant',
+        'SaaS/IT', 'Marketing & Acquisition', 'URSSAF', 'Partenariat académique',
+        'Formateurs / Freelances', 'Remboursement', 'Salaires', 'Loyers & charges', 'Autres impôts',
+    ];
+    const ENC_CATEGORIES = [
+        'Interco', 'Alternance (OPCO)', 'CPF', 'Reconversion', 'B2B', 'B2C',
+    ];
+
+    function renderDataQuality() {
+        const diversRows = rawData.filter(r => r.sens === 'Décaissement' && r.categorie === 'DIVERS');
+        const autresRows = rawData.filter(r => r.sens === 'Encaissement' && r.categorie === 'Autres revenus');
+
+        $('#dq-count-divers').textContent = diversRows.length;
+        $('#dq-count-autres').textContent = autresRows.length;
+
+        renderDqTable('dq-body-divers', diversRows, DEC_CATEGORIES);
+        renderDqTable('dq-body-autres', autresRows, ENC_CATEGORIES);
+    }
+
+    function renderDqTable(tbodyId, rows, categories) {
+        const tbody = document.getElementById(tbodyId);
+        if (rows.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="6" class="dq-empty">Aucune transaction à reclasser.</td></tr>`;
+            return;
+        }
+        tbody.innerHTML = '';
+        rows.forEach((row, i) => {
+            const tr = document.createElement('tr');
+            const idx = rawData.indexOf(row);
+
+            const options = categories.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
+
+            tr.innerHTML = `
+                <td>${escapeHtml(row.dateStr || '')}</td>
+                <td style="max-width:350px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escapeHtml(row.libelle)}">${escapeHtml(row.libelle)}</td>
+                <td>${escapeHtml(row.tiers || '')}</td>
+                <td class="text-right" style="white-space:nowrap">${formatCurrency(row.montant)}</td>
+                <td><select class="dq-select" data-idx="${idx}"><option value="">— Choisir —</option>${options}</select></td>
+                <td><button class="dq-btn-apply" data-idx="${idx}" disabled>Appliquer</button></td>
+            `;
+            tbody.appendChild(tr);
+        });
+
+        // Wire up select → enable button
+        tbody.querySelectorAll('.dq-select').forEach(sel => {
+            sel.addEventListener('change', () => {
+                const btn = tbody.querySelector(`.dq-btn-apply[data-idx="${sel.dataset.idx}"]`);
+                btn.disabled = !sel.value;
+            });
+        });
+
+        // Wire up apply buttons
+        tbody.querySelectorAll('.dq-btn-apply').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const idx = parseInt(btn.dataset.idx);
+                const sel = tbody.querySelector(`.dq-select[data-idx="${idx}"]`);
+                if (!sel || !sel.value) return;
+                applyDqReclassification(idx, sel.value);
+            });
+        });
+    }
+
+    function applyDqReclassification(rawIdx, newCategory) {
+        const row = rawData[rawIdx];
+        if (!row) return;
+        row.categorie = newCategory;
+        row.manualCategory = newCategory;
+        row.ruleHit = 'DQ: Reclassement manuel';
+
+        saveToStorage();
+        computeFilteredData();
+        renderDataQuality();
+        // Dashboard will refresh when user switches back, but also update in background
+        refreshDashboard();
+    }
 
     // ── Mouse glow ──
     document.addEventListener('mousemove', (e) => {

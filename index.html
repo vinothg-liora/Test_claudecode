@@ -89,6 +89,10 @@
                 </div>
                 <span class="brand-name"><span class="brand-sub">Cash Flow</span></span>
             </div>
+            <div class="nav-tabs">
+                <button class="nav-tab active" data-tab="dashboard">Tableau de bord</button>
+                <button class="nav-tab" data-tab="dataquality">Data Quality</button>
+            </div>
             <div class="nav-actions">
                 <button class="btn btn-ghost" id="btn-new-file">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
@@ -105,7 +109,8 @@
             </div>
         </nav>
 
-        <!-- KPI Cards -->
+        <!-- TAB: Dashboard -->
+        <div class="tab-content active" id="tab-dashboard">
         <div class="dashboard-content">
             <!-- Active cross-filter chips -->
             <div id="active-filters" class="active-filters hidden"></div>
@@ -371,6 +376,62 @@
                 </div>
             </div>
         </div>
+        </div><!-- /tab-dashboard -->
+
+        <!-- TAB: Data Quality -->
+        <div class="tab-content" id="tab-dataquality">
+        <div class="dashboard-content">
+            <div class="dq-header">
+                <h2>Data Quality — Transactions à reclasser</h2>
+                <p class="dq-subtitle">Reclassez les décaissements « DIVERS » et les encaissements « Autres revenus » pour améliorer la qualité de votre analyse.</p>
+            </div>
+
+            <!-- Décaissements DIVERS -->
+            <div class="dq-section">
+                <div class="dq-section-header">
+                    <h3>Décaissements — DIVERS <span class="dq-count" id="dq-count-divers">0</span></h3>
+                </div>
+                <div class="table-wrapper">
+                    <table class="data-table dq-table">
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Libellé</th>
+                                <th>Tiers</th>
+                                <th class="text-right">Montant</th>
+                                <th>Nouvelle catégorie</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody id="dq-body-divers"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Encaissements Autres revenus -->
+            <div class="dq-section">
+                <div class="dq-section-header">
+                    <h3>Encaissements — Autres revenus <span class="dq-count" id="dq-count-autres">0</span></h3>
+                </div>
+                <div class="table-wrapper">
+                    <table class="data-table dq-table">
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Libellé</th>
+                                <th>Tiers</th>
+                                <th class="text-right">Montant</th>
+                                <th>Nouvelle catégorie</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody id="dq-body-autres"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        </div><!-- /tab-dataquality -->
+
     </div>
 
     <script src="app.js"></script>
