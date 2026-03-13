@@ -20,13 +20,19 @@
 
     function saveToStorage() {
         try {
-            const serializable = rawData.map(r => ({
-                ...r,
-                date: r.date ? r.date.toISOString() : null,
-            }));
-            localStorage.setItem(STORAGE_DATA_KEY, JSON.stringify(serializable));
+            const serializable = rawData.map(r => {
+                const { _libNorm, _tiersNorm, ...clean } = r;
+                return {
+                    ...clean,
+                    date: r.date ? r.date.toISOString() : null,
+                };
+            });
+            const json = JSON.stringify(serializable);
+            localStorage.setItem(STORAGE_DATA_KEY, json);
+            return true;
         } catch (e) {
-            console.warn('Impossible de sauvegarder dans localStorage:', e.message);
+            console.error('Impossible de sauvegarder dans localStorage:', e.message);
+            return false;
         }
     }
 
@@ -652,8 +658,12 @@
             categorizeAll(rawData);
 
             // Save merged data + file history
-            saveToStorage();
-            addFileHistory(fileName || 'fichier', newRows.length);
+            const saved = saveToStorage();
+            if (saved) {
+                addFileHistory(fileName || 'fichier', added);
+            } else {
+                alert('Attention : les données dépassent la capacité de stockage du navigateur. L\'historique pourrait ne pas être conservé au prochain chargement. Pensez à effacer l\'ancien historique si nécessaire.');
+            }
 
             filteredData = [...rawData];
 
