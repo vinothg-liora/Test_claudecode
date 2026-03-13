@@ -734,6 +734,91 @@ body::before {
 .tag-sens-enc { background: rgba(16, 185, 129, 0.15); color: #34d399; font-size: 0.65rem; }
 .tag-sens-dec { background: rgba(239, 68, 68, 0.15); color: #f87171; font-size: 0.65rem; }
 
+/* Active cross-filter chips */
+.active-filters {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    margin-bottom: 1rem;
+    padding: 0.75rem 1rem;
+    background: rgba(139, 92, 246, 0.06);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+}
+
+.active-filters.hidden {
+    display: none;
+}
+
+.filter-chip-label {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    font-weight: 500;
+    margin-right: 0.25rem;
+}
+
+.filter-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.3rem 0.6rem;
+    background: var(--gradient-primary);
+    color: white;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    font-weight: 500;
+    cursor: default;
+    animation: chipIn 0.2s ease-out;
+}
+
+.filter-chip-close {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.2);
+    cursor: pointer;
+    font-size: 0.65rem;
+    line-height: 1;
+    transition: background var(--transition);
+}
+
+.filter-chip-close:hover {
+    background: rgba(255, 255, 255, 0.4);
+}
+
+.filter-clear-all {
+    margin-left: auto;
+    font-size: 0.75rem;
+    color: var(--purple-400);
+    cursor: pointer;
+    border: none;
+    background: none;
+    font-family: inherit;
+    font-weight: 500;
+    padding: 0.25rem 0.5rem;
+    border-radius: var(--radius-sm);
+    transition: all var(--transition);
+}
+
+.filter-clear-all:hover {
+    background: rgba(139, 92, 246, 0.1);
+    color: var(--purple-300);
+}
+
+@keyframes chipIn {
+    from { transform: scale(0.8); opacity: 0; }
+    to { transform: scale(1); opacity: 1; }
+}
+
+/* Chart clickable cursor */
+.chart-container canvas {
+    cursor: pointer;
+}
+
 .table-pagination {
     display: flex;
     align-items: center;

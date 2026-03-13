@@ -559,10 +559,115 @@
     }
 
     // ══════════════════════════════════════════════
+    //  CROSS-FILTER STATE
+    // ══════════════════════════════════════════════
+
+    const crossFilter = {
+        categorie: null,   // from doughnut clicks
+        sens: null,        // 'Encaissement' or 'Décaissement'
+        month: null,       // 'YYYY-MM' from flow chart click
+        equipe: null,      // from teams chart click
+        search: '',        // from search input
+        typeDropdown: '',  // from type select
+        teamDropdown: '',  // from team select
+        catDropdown: '',   // from category select
+    };
+
+    function getMonthKey(r) {
+        if (!r.date || isNaN(r.date.getTime())) return null;
+        return r.date.getFullYear() + '-' + String(r.date.getMonth() + 1).padStart(2, '0');
+    }
+
+    function computeFilteredData() {
+        filteredData = rawData.filter(r => {
+            if (crossFilter.categorie && r.categorie !== crossFilter.categorie) return false;
+            if (crossFilter.sens && r.sens !== crossFilter.sens) return false;
+            if (crossFilter.month && getMonthKey(r) !== crossFilter.month) return false;
+            if (crossFilter.equipe) {
+                const team = r.equipe && r.equipe.trim() ? r.equipe.trim() : 'Non attribué';
+                if (team !== crossFilter.equipe) return false;
+            }
+            if (crossFilter.typeDropdown && r.type !== crossFilter.typeDropdown) return false;
+            if (crossFilter.teamDropdown && r.equipe !== crossFilter.teamDropdown) return false;
+            if (crossFilter.catDropdown && r.categorie !== crossFilter.catDropdown) return false;
+            if (crossFilter.search) {
+                const s = crossFilter.search;
+                const searchable = [r.libelle, r.tiers, r.nom_carte, r.titulaire, r.equipe, r.type, r.categorie]
+                    .join(' ').toLowerCase();
+                if (!searchable.includes(s)) return false;
+            }
+            return true;
+        });
+    }
+
+    function toggleCrossFilter(key, value) {
+        if (crossFilter[key] === value) {
+            crossFilter[key] = null; // deselect
+        } else {
+            crossFilter[key] = value;
+        }
+        refreshDashboard();
+    }
+
+    function clearAllCrossFilters() {
+        crossFilter.categorie = null;
+        crossFilter.sens = null;
+        crossFilter.month = null;
+        crossFilter.equipe = null;
+        refreshDashboard();
+    }
+
+    function hasCrossFilters() {
+        return crossFilter.categorie || crossFilter.sens || crossFilter.month || crossFilter.equipe;
+    }
+
+    function renderFilterChips() {
+        const container = $('#active-filters');
+        if (!hasCrossFilters()) {
+            container.classList.add('hidden');
+            return;
+        }
+        container.classList.remove('hidden');
+
+        const labels = { categorie: 'Catégorie', sens: 'Sens', month: 'Mois', equipe: 'Équipe' };
+        let html = '<span class="filter-chip-label">Filtres actifs :</span>';
+
+        for (const key of ['categorie', 'sens', 'month', 'equipe']) {
+            if (!crossFilter[key]) continue;
+            let display = crossFilter[key];
+            if (key === 'month') {
+                const [y, m] = display.split('-');
+                display = new Date(+y, +m - 1).toLocaleDateString('fr-FR', { month: 'short', year: 'numeric' });
+            }
+            html += `<span class="filter-chip">${labels[key]}: ${escapeHtml(display)}<span class="filter-chip-close" data-key="${key}">&times;</span></span>`;
+        }
+
+        html += '<button class="filter-clear-all">Tout effacer</button>';
+        container.innerHTML = html;
+
+        container.querySelectorAll('.filter-chip-close').forEach(el => {
+            el.addEventListener('click', () => {
+                crossFilter[el.dataset.key] = null;
+                refreshDashboard();
+            });
+        });
+        const clearBtn = container.querySelector('.filter-clear-all');
+        if (clearBtn) clearBtn.addEventListener('click', clearAllCrossFilters);
+    }
+
+    // ══════════════════════════════════════════════
     //  DASHBOARD BUILDER
     // ══════════════════════════════════════════════
 
     function buildDashboard() {
+        populateFilters();
+        refreshDashboard();
+    }
+
+    function refreshDashboard() {
+        computeFilteredData();
+        currentPage = 1;
+        renderFilterChips();
         renderKPIs();
         renderFlowChart();
         renderCumulativeChart();
@@ -570,15 +675,15 @@
         renderDecCategoriesChart();
         renderTopVendorsChart();
         renderTeamsChart();
-        populateFilters();
         renderTable();
         renderSummary();
     }
 
-    // ── KPIs ──
+    // ── KPIs (use filteredData) ──
     function renderKPIs() {
-        const inflows = rawData.filter((r) => r.montant > 0).reduce((s, r) => s + r.montant, 0);
-        const outflows = rawData.filter((r) => r.montant < 0).reduce((s, r) => s + r.montant, 0);
+        const data = filteredData;
+        const inflows = data.filter(r => r.montant > 0).reduce((s, r) => s + r.montant, 0);
+        const outflows = data.filter(r => r.montant < 0).reduce((s, r) => s + r.montant, 0);
         const net = inflows + outflows;
 
         $('#kpi-inflows').textContent = formatCurrency(inflows);
@@ -587,219 +692,140 @@
         $('#kpi-outflows').className = 'kpi-value amount-negative';
         $('#kpi-net').textContent = formatCurrency(net);
         $('#kpi-net').className = 'kpi-value ' + (net >= 0 ? 'amount-positive' : 'amount-negative');
-        $('#kpi-count').textContent = rawData.length.toLocaleString('fr-FR');
+        $('#kpi-count').textContent = data.length.toLocaleString('fr-FR');
 
-        const dates = rawData.map((r) => r.date).filter((d) => d && !isNaN(d.getTime()));
+        const dates = data.map(r => r.date).filter(d => d && !isNaN(d.getTime()));
         if (dates.length > 0) {
             const minDate = new Date(Math.min(...dates));
             const maxDate = new Date(Math.max(...dates));
             $('#period-badge').textContent =
-                minDate.toLocaleDateString('fr-FR', { month: 'short', year: 'numeric' }) +
-                ' → ' +
+                minDate.toLocaleDateString('fr-FR', { month: 'short', year: 'numeric' }) + ' → ' +
                 maxDate.toLocaleDateString('fr-FR', { month: 'short', year: 'numeric' });
         }
     }
 
     function formatCurrency(val) {
         return new Intl.NumberFormat('fr-FR', {
-            style: 'currency',
-            currency: 'EUR',
-            minimumFractionDigits: 0,
-            maximumFractionDigits: 0,
+            style: 'currency', currency: 'EUR',
+            minimumFractionDigits: 0, maximumFractionDigits: 0,
         }).format(val);
     }
 
     // ── Chart Defaults ──
     const chartColors = {
-        purple: '#8b5cf6',
-        blue: '#3b82f6',
-        green: '#10b981',
-        red: '#ef4444',
-        amber: '#f59e0b',
-        cyan: '#06b6d4',
-        pink: '#ec4899',
-        indigo: '#6366f1',
-        teal: '#14b8a6',
-        orange: '#f97316',
-        lime: '#84cc16',
-        rose: '#f43f5e',
-        sky: '#38bdf8',
-        fuchsia: '#d946ef',
-        emerald: '#34d399',
-        yellow: '#eab308',
+        purple: '#8b5cf6', blue: '#3b82f6', green: '#10b981', red: '#ef4444',
+        amber: '#f59e0b', cyan: '#06b6d4', pink: '#ec4899', indigo: '#6366f1',
+        teal: '#14b8a6', orange: '#f97316', lime: '#84cc16', rose: '#f43f5e',
+        sky: '#38bdf8', fuchsia: '#d946ef', emerald: '#34d399', yellow: '#eab308',
     };
     const paletteArray = Object.values(chartColors);
 
     function getChartDefaults() {
         return {
-            responsive: true,
-            maintainAspectRatio: false,
+            responsive: true, maintainAspectRatio: false,
             plugins: {
-                legend: {
-                    labels: {
-                        color: '#a5a0b8',
-                        font: { family: 'Inter', size: 12 },
-                        padding: 16,
-                    },
-                },
+                legend: { labels: { color: '#a5a0b8', font: { family: 'Inter', size: 12 }, padding: 16 } },
                 tooltip: {
-                    backgroundColor: 'rgba(26, 20, 40, 0.95)',
-                    titleColor: '#f1f0f5',
-                    bodyColor: '#a5a0b8',
-                    borderColor: 'rgba(139, 92, 246, 0.2)',
-                    borderWidth: 1,
-                    cornerRadius: 8,
-                    padding: 12,
-                    titleFont: { family: 'Inter', weight: '600' },
-                    bodyFont: { family: 'Inter' },
-                    callbacks: {
-                        label: (ctx) => {
-                            const val = ctx.parsed.y ?? ctx.parsed;
-                            return ctx.dataset.label + ': ' + formatCurrency(val);
-                        },
-                    },
+                    backgroundColor: 'rgba(26, 20, 40, 0.95)', titleColor: '#f1f0f5', bodyColor: '#a5a0b8',
+                    borderColor: 'rgba(139, 92, 246, 0.2)', borderWidth: 1, cornerRadius: 8, padding: 12,
+                    titleFont: { family: 'Inter', weight: '600' }, bodyFont: { family: 'Inter' },
+                    callbacks: { label: (ctx) => { const val = ctx.parsed.y ?? ctx.parsed; return ctx.dataset.label + ': ' + formatCurrency(val); } },
                 },
             },
             scales: {
-                x: {
-                    ticks: { color: '#6b6580', font: { family: 'Inter', size: 11 } },
-                    grid: { color: 'rgba(139, 92, 246, 0.06)' },
-                },
-                y: {
-                    ticks: {
-                        color: '#6b6580',
-                        font: { family: 'Inter', size: 11 },
-                        callback: (v) => formatCurrency(v),
-                    },
-                    grid: { color: 'rgba(139, 92, 246, 0.06)' },
-                },
+                x: { ticks: { color: '#6b6580', font: { family: 'Inter', size: 11 } }, grid: { color: 'rgba(139, 92, 246, 0.06)' } },
+                y: { ticks: { color: '#6b6580', font: { family: 'Inter', size: 11 }, callback: (v) => formatCurrency(v) }, grid: { color: 'rgba(139, 92, 246, 0.06)' } },
             },
         };
     }
 
-    function getDoughnutOptions(position) {
+    function getDoughnutOptions() {
         return {
-            responsive: true,
-            maintainAspectRatio: false,
-            cutout: '55%',
+            responsive: true, maintainAspectRatio: false, cutout: '55%',
             plugins: {
-                legend: {
-                    position: position || 'right',
-                    labels: {
-                        color: '#a5a0b8',
-                        font: { family: 'Inter', size: 11 },
-                        padding: 10,
-                        boxWidth: 12,
-                        boxHeight: 12,
-                        borderRadius: 3,
-                    },
-                },
+                legend: { position: 'right', labels: { color: '#a5a0b8', font: { family: 'Inter', size: 11 }, padding: 10, boxWidth: 12, boxHeight: 12, borderRadius: 3 } },
                 tooltip: {
-                    backgroundColor: 'rgba(26, 20, 40, 0.95)',
-                    titleColor: '#f1f0f5',
-                    bodyColor: '#a5a0b8',
-                    borderColor: 'rgba(139, 92, 246, 0.2)',
-                    borderWidth: 1,
-                    cornerRadius: 8,
-                    padding: 12,
-                    callbacks: {
-                        label: (ctx) => {
-                            const total = ctx.dataset.data.reduce((s, v) => s + v, 0);
-                            const pct = ((ctx.parsed / total) * 100).toFixed(1);
-                            return ctx.label + ': ' + formatCurrency(ctx.parsed) + ' (' + pct + '%)';
-                        },
-                    },
+                    backgroundColor: 'rgba(26, 20, 40, 0.95)', titleColor: '#f1f0f5', bodyColor: '#a5a0b8',
+                    borderColor: 'rgba(139, 92, 246, 0.2)', borderWidth: 1, cornerRadius: 8, padding: 12,
+                    callbacks: { label: (ctx) => { const total = ctx.dataset.data.reduce((s, v) => s + v, 0); const pct = ((ctx.parsed / total) * 100).toFixed(1); return ctx.label + ': ' + formatCurrency(ctx.parsed) + ' (' + pct + '%)'; } },
                 },
             },
         };
     }
 
     function destroyChart(key) {
-        if (charts[key]) {
-            charts[key].destroy();
-            charts[key] = null;
-        }
+        if (charts[key]) { charts[key].destroy(); charts[key] = null; }
     }
 
-    // ── Aggregate by Month ──
+    // ── Aggregate helpers (all use filteredData) ──
     function aggregateByMonth() {
         const months = {};
-        rawData.forEach((r) => {
+        // Use rawData for month labels (to keep consistent x-axis), but compute from filteredData
+        rawData.forEach(r => {
             if (!r.date || isNaN(r.date.getTime())) return;
-            const key = r.date.getFullYear() + '-' + String(r.date.getMonth() + 1).padStart(2, '0');
+            const key = getMonthKey(r);
+            if (!months[key]) months[key] = { inflows: 0, outflows: 0 };
+        });
+        filteredData.forEach(r => {
+            if (!r.date || isNaN(r.date.getTime())) return;
+            const key = getMonthKey(r);
             if (!months[key]) months[key] = { inflows: 0, outflows: 0 };
             if (r.montant > 0) months[key].inflows += r.montant;
             else months[key].outflows += r.montant;
         });
         const keys = Object.keys(months).sort();
         return {
-            labels: keys.map((k) => {
-                const [y, m] = k.split('-');
-                return new Date(+y, +m - 1).toLocaleDateString('fr-FR', { month: 'short', year: 'numeric' });
-            }),
-            inflows: keys.map((k) => months[k].inflows),
-            outflows: keys.map((k) => Math.abs(months[k].outflows)),
-            net: keys.map((k) => months[k].inflows + months[k].outflows),
+            keys,
+            labels: keys.map(k => { const [y, m] = k.split('-'); return new Date(+y, +m - 1).toLocaleDateString('fr-FR', { month: 'short', year: 'numeric' }); }),
+            inflows: keys.map(k => months[k].inflows),
+            outflows: keys.map(k => Math.abs(months[k].outflows)),
+            net: keys.map(k => months[k].inflows + months[k].outflows),
         };
     }
 
-    // ── Flow Chart (Bar) ──
+    function aggregateByCategorie(sens) {
+        const cats = {};
+        filteredData.filter(r => r.sens === sens).forEach(r => {
+            const cat = r.categorie || 'Non catégorisé';
+            cats[cat] = (cats[cat] || 0) + Math.abs(r.montant);
+        });
+        const sorted = Object.entries(cats).sort((a, b) => b[1] - a[1]);
+        return { labels: sorted.map(([k]) => k), values: sorted.map(([, v]) => v) };
+    }
+
+    // ── Flow Chart — clickable bars select a month ──
     function renderFlowChart() {
         const data = aggregateByMonth();
         destroyChart('flow');
         const ctx = $('#chart-flow').getContext('2d');
         const defaults = getChartDefaults();
 
+        // Highlight selected month
+        const selectedIdx = crossFilter.month ? data.keys.indexOf(crossFilter.month) : -1;
+        const greenBg = data.inflows.map((_, i) => i === selectedIdx ? 'rgba(16, 185, 129, 1)' : 'rgba(16, 185, 129, 0.7)');
+        const redBg = data.outflows.map((_, i) => i === selectedIdx ? 'rgba(239, 68, 68, 1)' : 'rgba(239, 68, 68, 0.7)');
+
         charts.flow = new Chart(ctx, {
             type: 'bar',
             data: {
                 labels: data.labels,
                 datasets: [
-                    {
-                        label: 'Encaissements',
-                        data: data.inflows,
-                        backgroundColor: 'rgba(16, 185, 129, 0.7)',
-                        borderColor: '#10b981',
-                        borderWidth: 1,
-                        borderRadius: 4,
-                    },
-                    {
-                        label: 'Décaissements',
-                        data: data.outflows,
-                        backgroundColor: 'rgba(239, 68, 68, 0.7)',
-                        borderColor: '#ef4444',
-                        borderWidth: 1,
-                        borderRadius: 4,
-                    },
-                    {
-                        label: 'Solde net',
-                        data: data.net,
-                        type: 'line',
-                        borderColor: '#8b5cf6',
-                        backgroundColor: 'rgba(139, 92, 246, 0.1)',
-                        borderWidth: 2,
-                        pointRadius: 4,
-                        pointBackgroundColor: '#8b5cf6',
-                        tension: 0.3,
-                        fill: true,
-                    },
+                    { label: 'Encaissements', data: data.inflows, backgroundColor: greenBg, borderColor: '#10b981', borderWidth: 1, borderRadius: 4 },
+                    { label: 'Décaissements', data: data.outflows, backgroundColor: redBg, borderColor: '#ef4444', borderWidth: 1, borderRadius: 4 },
+                    { label: 'Solde net', data: data.net, type: 'line', borderColor: '#8b5cf6', backgroundColor: 'rgba(139, 92, 246, 0.1)', borderWidth: 2, pointRadius: 4, pointBackgroundColor: '#8b5cf6', tension: 0.3, fill: true },
                 ],
             },
             options: {
                 ...defaults,
                 interaction: { intersect: false, mode: 'index' },
+                onClick: (evt, elements) => {
+                    if (!elements.length) return;
+                    const idx = elements[0].index;
+                    toggleCrossFilter('month', data.keys[idx]);
+                },
                 plugins: {
                     ...defaults.plugins,
-                    tooltip: {
-                        ...defaults.plugins.tooltip,
-                        callbacks: {
-                            label: (ctx) => {
-                                const val = ctx.parsed.y;
-                                const prefix = ctx.datasetIndex === 1 ? '-' : '';
-                                return ctx.dataset.label + ': ' + prefix + formatCurrency(Math.abs(val));
-                            },
-                        },
-                    },
+                    tooltip: { ...defaults.plugins.tooltip, callbacks: { label: (ctx) => { const val = ctx.parsed.y; const prefix = ctx.datasetIndex === 1 ? '-' : ''; return ctx.dataset.label + ': ' + prefix + formatCurrency(Math.abs(val)); } } },
                 },
             },
         });
@@ -810,7 +836,7 @@
         const data = aggregateByMonth();
         destroyChart('cumulative');
         let cumulative = 0;
-        const cumData = data.net.map((v) => { cumulative += v; return cumulative; });
+        const cumData = data.net.map(v => { cumulative += v; return cumulative; });
         const ctx = $('#chart-cumulative').getContext('2d');
         const defaults = getChartDefaults();
         const gradient = ctx.createLinearGradient(0, 0, 0, 300);
@@ -819,87 +845,62 @@
 
         charts.cumulative = new Chart(ctx, {
             type: 'line',
-            data: {
-                labels: data.labels,
-                datasets: [{
-                    label: 'Solde cumulé',
-                    data: cumData,
-                    borderColor: '#8b5cf6',
-                    backgroundColor: gradient,
-                    borderWidth: 2.5,
-                    fill: true,
-                    tension: 0.4,
-                    pointRadius: 4,
-                    pointBackgroundColor: '#8b5cf6',
-                    pointBorderColor: '#1a1428',
-                    pointBorderWidth: 2,
-                }],
+            data: { labels: data.labels, datasets: [{ label: 'Solde cumulé', data: cumData, borderColor: '#8b5cf6', backgroundColor: gradient, borderWidth: 2.5, fill: true, tension: 0.4, pointRadius: 4, pointBackgroundColor: '#8b5cf6', pointBorderColor: '#1a1428', pointBorderWidth: 2 }] },
+            options: {
+                ...defaults,
+                onClick: (evt, elements) => {
+                    if (!elements.length) return;
+                    toggleCrossFilter('month', data.keys[elements[0].index]);
+                },
             },
-            options: defaults,
         });
     }
 
-    // ── Encaissements by category (doughnut) ──
-    function aggregateByCategorie(sens) {
-        const cats = {};
-        rawData.filter(r => r.sens === sens).forEach(r => {
-            const cat = r.categorie || 'Non catégorisé';
-            if (!cats[cat]) cats[cat] = 0;
-            cats[cat] += Math.abs(r.montant);
-        });
-        const sorted = Object.entries(cats).sort((a, b) => b[1] - a[1]);
-        return {
-            labels: sorted.map(([k]) => k),
-            values: sorted.map(([, v]) => v),
-        };
-    }
-
+    // ── Enc categories — click filters by category ──
     function renderEncCategoriesChart() {
         const data = aggregateByCategorie('Encaissement');
         destroyChart('encCategories');
+        if (data.labels.length === 0) { $('#chart-enc-categories').getContext('2d').clearRect(0, 0, 9999, 9999); return; }
         const ctx = $('#chart-enc-categories').getContext('2d');
 
         charts.encCategories = new Chart(ctx, {
             type: 'doughnut',
-            data: {
-                labels: data.labels,
-                datasets: [{
-                    data: data.values,
-                    backgroundColor: paletteArray.slice(0, data.labels.length),
-                    borderColor: '#1a1428',
-                    borderWidth: 2,
-                    hoverOffset: 6,
-                }],
+            data: { labels: data.labels, datasets: [{ data: data.values, backgroundColor: paletteArray.slice(0, data.labels.length), borderColor: '#1a1428', borderWidth: 2, hoverOffset: 6 }] },
+            options: {
+                ...getDoughnutOptions(),
+                onClick: (evt, elements) => {
+                    if (!elements.length) return;
+                    const label = data.labels[elements[0].index];
+                    toggleCrossFilter('categorie', label);
+                },
             },
-            options: getDoughnutOptions('right'),
         });
     }
 
     function renderDecCategoriesChart() {
         const data = aggregateByCategorie('Décaissement');
         destroyChart('decCategories');
+        if (data.labels.length === 0) { $('#chart-dec-categories').getContext('2d').clearRect(0, 0, 9999, 9999); return; }
         const ctx = $('#chart-dec-categories').getContext('2d');
 
         charts.decCategories = new Chart(ctx, {
             type: 'doughnut',
-            data: {
-                labels: data.labels,
-                datasets: [{
-                    data: data.values,
-                    backgroundColor: paletteArray.slice(0, data.labels.length),
-                    borderColor: '#1a1428',
-                    borderWidth: 2,
-                    hoverOffset: 6,
-                }],
+            data: { labels: data.labels, datasets: [{ data: data.values, backgroundColor: paletteArray.slice(0, data.labels.length), borderColor: '#1a1428', borderWidth: 2, hoverOffset: 6 }] },
+            options: {
+                ...getDoughnutOptions(),
+                onClick: (evt, elements) => {
+                    if (!elements.length) return;
+                    const label = data.labels[elements[0].index];
+                    toggleCrossFilter('categorie', label);
+                },
             },
-            options: getDoughnutOptions('right'),
         });
     }
 
-    // ── Top Vendors (by category now) ──
+    // ── Volume by category (horizontal bar) — click filters ──
     function renderTopVendorsChart() {
         const cats = {};
-        rawData.forEach(r => {
+        filteredData.forEach(r => {
             const cat = r.categorie || 'Non catégorisé';
             if (!cats[cat]) cats[cat] = { in: 0, out: 0 };
             if (r.montant > 0) cats[cat].in += r.montant;
@@ -908,8 +909,7 @@
 
         const sorted = Object.entries(cats)
             .map(([name, v]) => ({ name, total: v.in + v.out, in: v.in, out: v.out }))
-            .sort((a, b) => b.total - a.total)
-            .slice(0, 12);
+            .sort((a, b) => b.total - a.total).slice(0, 12);
 
         destroyChart('topVendors');
         const ctx = $('#chart-top-vendors').getContext('2d');
@@ -918,66 +918,52 @@
         charts.topVendors = new Chart(ctx, {
             type: 'bar',
             data: {
-                labels: sorted.map((v) => v.name),
+                labels: sorted.map(v => v.name),
                 datasets: [
-                    {
-                        label: 'Encaissements',
-                        data: sorted.map((v) => v.in),
-                        backgroundColor: 'rgba(16, 185, 129, 0.7)',
-                        borderRadius: 4,
-                    },
-                    {
-                        label: 'Décaissements',
-                        data: sorted.map((v) => v.out),
-                        backgroundColor: 'rgba(239, 68, 68, 0.7)',
-                        borderRadius: 4,
-                    },
+                    { label: 'Encaissements', data: sorted.map(v => v.in), backgroundColor: 'rgba(16, 185, 129, 0.7)', borderRadius: 4 },
+                    { label: 'Décaissements', data: sorted.map(v => v.out), backgroundColor: 'rgba(239, 68, 68, 0.7)', borderRadius: 4 },
                 ],
             },
             options: {
-                ...defaults,
-                indexAxis: 'y',
+                ...defaults, indexAxis: 'y',
+                onClick: (evt, elements) => {
+                    if (!elements.length) return;
+                    const label = sorted[elements[0].index].name;
+                    toggleCrossFilter('categorie', label);
+                },
                 scales: {
                     ...defaults.scales,
-                    x: {
-                        ...defaults.scales.x,
-                        ticks: { ...defaults.scales.x.ticks, callback: (v) => formatCurrency(v) },
-                    },
-                    y: {
-                        ...defaults.scales.y,
-                        ticks: { color: '#a5a0b8', font: { family: 'Inter', size: 11 } },
-                        grid: { display: false },
-                    },
+                    x: { ...defaults.scales.x, ticks: { ...defaults.scales.x.ticks, callback: v => formatCurrency(v) } },
+                    y: { ...defaults.scales.y, ticks: { color: '#a5a0b8', font: { family: 'Inter', size: 11 } }, grid: { display: false } },
                 },
             },
         });
     }
 
-    // ── Teams Chart ──
+    // ── Teams Chart — click filters by team ──
     function renderTeamsChart() {
         const teams = {};
-        rawData.forEach((r) => {
+        filteredData.forEach(r => {
             const team = r.equipe && r.equipe.trim() ? r.equipe.trim() : 'Non attribué';
-            if (!teams[team]) teams[team] = 0;
-            teams[team] += Math.abs(r.montant);
+            teams[team] = (teams[team] || 0) + Math.abs(r.montant);
         });
 
         const sorted = Object.entries(teams).sort((a, b) => b[1] - a[1]);
         destroyChart('teams');
+        if (sorted.length === 0) return;
         const ctx = $('#chart-teams').getContext('2d');
 
         charts.teams = new Chart(ctx, {
             type: 'doughnut',
-            data: {
-                labels: sorted.map(([k]) => k),
-                datasets: [{
-                    data: sorted.map(([, v]) => v),
-                    backgroundColor: paletteArray.slice(0, sorted.length),
-                    borderColor: '#1a1428',
-                    borderWidth: 2,
-                }],
+            data: { labels: sorted.map(([k]) => k), datasets: [{ data: sorted.map(([, v]) => v), backgroundColor: paletteArray.slice(0, sorted.length), borderColor: '#1a1428', borderWidth: 2 }] },
+            options: {
+                ...getDoughnutOptions(),
+                onClick: (evt, elements) => {
+                    if (!elements.length) return;
+                    const label = sorted[elements[0].index][0];
+                    toggleCrossFilter('equipe', label);
+                },
             },
-            options: getDoughnutOptions('right'),
         });
     }
 
@@ -986,54 +972,26 @@
     // ══════════════════════════════════════════════
 
     function populateFilters() {
-        const types = new Set(rawData.map((r) => r.type).filter(Boolean));
-        const teams = new Set(rawData.map((r) => r.equipe).filter(Boolean));
-        const categories = new Set(rawData.map((r) => r.categorie).filter(Boolean));
+        const types = new Set(rawData.map(r => r.type).filter(Boolean));
+        const teams = new Set(rawData.map(r => r.equipe).filter(Boolean));
+        const categories = new Set(rawData.map(r => r.categorie).filter(Boolean));
 
         const typeSelect = $('#filter-type');
         typeSelect.innerHTML = '<option value="">Tous les types</option>';
-        types.forEach((t) => {
-            typeSelect.innerHTML += `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`;
-        });
+        types.forEach(t => { typeSelect.innerHTML += `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`; });
 
         const teamSelect = $('#filter-team');
         teamSelect.innerHTML = '<option value="">Toutes les équipes</option>';
-        teams.forEach((t) => {
-            teamSelect.innerHTML += `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`;
-        });
+        teams.forEach(t => { teamSelect.innerHTML += `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`; });
 
         const catSelect = $('#filter-categorie');
         catSelect.innerHTML = '<option value="">Toutes les catégories</option>';
-        [...categories].sort().forEach((c) => {
-            catSelect.innerHTML += `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`;
-        });
+        [...categories].sort().forEach(c => { catSelect.innerHTML += `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`; });
 
-        typeSelect.addEventListener('change', applyFilters);
-        teamSelect.addEventListener('change', applyFilters);
-        catSelect.addEventListener('change', applyFilters);
-        $('#search-input').addEventListener('input', debounce(applyFilters, 300));
-    }
-
-    function applyFilters() {
-        const search = $('#search-input').value.toLowerCase();
-        const typeFilter = $('#filter-type').value;
-        const teamFilter = $('#filter-team').value;
-        const catFilter = $('#filter-categorie').value;
-
-        filteredData = rawData.filter((r) => {
-            if (typeFilter && r.type !== typeFilter) return false;
-            if (teamFilter && r.equipe !== teamFilter) return false;
-            if (catFilter && r.categorie !== catFilter) return false;
-            if (search) {
-                const searchable = [r.libelle, r.tiers, r.nom_carte, r.titulaire, r.equipe, r.type, r.categorie]
-                    .join(' ').toLowerCase();
-                if (!searchable.includes(search)) return false;
-            }
-            return true;
-        });
-
-        currentPage = 1;
-        renderTable();
+        typeSelect.addEventListener('change', () => { crossFilter.typeDropdown = typeSelect.value; refreshDashboard(); });
+        teamSelect.addEventListener('change', () => { crossFilter.teamDropdown = teamSelect.value; refreshDashboard(); });
+        catSelect.addEventListener('change', () => { crossFilter.catDropdown = catSelect.value; refreshDashboard(); });
+        $('#search-input').addEventListener('input', debounce(() => { crossFilter.search = $('#search-input').value.toLowerCase(); refreshDashboard(); }, 300));
     }
 
     function renderTable() {
@@ -1041,23 +999,18 @@
         const start = (currentPage - 1) * PAGE_SIZE;
         const pageData = filteredData.slice(start, start + PAGE_SIZE);
 
-        tbody.innerHTML = pageData
-            .map(
-                (r) => `
+        tbody.innerHTML = pageData.map(r => `
             <tr>
                 <td>${escapeHtml(r.dateStr)}</td>
                 <td title="${escapeHtml(r.libelle)}">${escapeHtml(truncate(r.libelle, 45))}</td>
                 <td>${escapeHtml(r.tiers || '—')}</td>
-                <td class="text-right ${r.montant >= 0 ? 'amount-positive' : 'amount-negative'}">
-                    ${formatCurrency(r.montant)}
-                </td>
+                <td class="text-right ${r.montant >= 0 ? 'amount-positive' : 'amount-negative'}">${formatCurrency(r.montant)}</td>
                 <td><span class="tag ${getCatTagClass(r.categorie)}" title="${escapeHtml(r.ruleHit)}">${escapeHtml(r.categorie || '—')}</span></td>
                 <td><span class="tag tag-sens-${r.montant >= 0 ? 'enc' : 'dec'}">${r.montant >= 0 ? 'Enc' : 'Déc'}</span></td>
                 <td>${escapeHtml(r.equipe || '—')}</td>
                 <td>${escapeHtml(r.titulaire || '—')}</td>
             </tr>`
-            )
-            .join('');
+        ).join('');
 
         renderPagination();
     }
@@ -1079,7 +1032,7 @@
         if (currentPage < totalPages) html += `<button class="page-btn" data-page="${currentPage + 1}">&raquo;</button>`;
 
         container.innerHTML = html;
-        container.querySelectorAll('.page-btn').forEach((btn) => {
+        container.querySelectorAll('.page-btn').forEach(btn => {
             btn.addEventListener('click', () => {
                 currentPage = parseInt(btn.dataset.page, 10);
                 renderTable();
@@ -1088,7 +1041,6 @@
         });
     }
 
-    // Category tag color mapping
     const CAT_COLOR_MAP = {
         'B2B': 'tag-b2b', 'B2C': 'tag-b2c', 'Interco': 'tag-interco',
         'Alternance (OPCO)': 'tag-opco', 'CPF': 'tag-cpf', 'Reconversion': 'tag-reconv',
@@ -1100,54 +1052,43 @@
         'DIVERS': 'tag-divers',
     };
 
-    function getCatTagClass(cat) {
-        return CAT_COLOR_MAP[cat] || 'tag-default';
-    }
+    function getCatTagClass(cat) { return CAT_COLOR_MAP[cat] || 'tag-default'; }
 
     // ══════════════════════════════════════════════
-    //  SUMMARY
+    //  SUMMARY (uses filteredData)
     // ══════════════════════════════════════════════
 
     function renderSummary() {
-        // Top expense categories
+        const data = filteredData;
+
         const expensesByCat = {};
-        rawData.filter((r) => r.montant < 0).forEach((r) => {
+        data.filter(r => r.montant < 0).forEach(r => {
             const cat = r.categorie || 'Non catégorisé';
             expensesByCat[cat] = (expensesByCat[cat] || 0) + Math.abs(r.montant);
         });
         const topExpenses = Object.entries(expensesByCat).sort((a, b) => b[1] - a[1]).slice(0, 8);
+        $('#summary-expenses').innerHTML = topExpenses.map(([name, val]) =>
+            `<div class="summary-item"><span class="summary-item-label">${escapeHtml(name)}</span><span class="summary-item-value amount-negative">${formatCurrency(-val)}</span></div>`
+        ).join('');
 
-        $('#summary-expenses').innerHTML = topExpenses
-            .map(([name, val]) =>
-                `<div class="summary-item">
-                    <span class="summary-item-label">${escapeHtml(name)}</span>
-                    <span class="summary-item-value amount-negative">${formatCurrency(-val)}</span>
-                </div>`
-            ).join('');
-
-        // Top income categories
         const incomeByCat = {};
-        rawData.filter((r) => r.montant > 0).forEach((r) => {
+        data.filter(r => r.montant > 0).forEach(r => {
             const cat = r.categorie || 'Non catégorisé';
             incomeByCat[cat] = (incomeByCat[cat] || 0) + r.montant;
         });
         const topIncome = Object.entries(incomeByCat).sort((a, b) => b[1] - a[1]).slice(0, 8);
-
-        $('#summary-income').innerHTML = topIncome
-            .map(([name, val]) =>
-                `<div class="summary-item">
-                    <span class="summary-item-label">${escapeHtml(name)}</span>
-                    <span class="summary-item-value amount-positive">${formatCurrency(val)}</span>
-                </div>`
-            ).join('');
+        $('#summary-income').innerHTML = topIncome.map(([name, val]) =>
+            `<div class="summary-item"><span class="summary-item-label">${escapeHtml(name)}</span><span class="summary-item-value amount-positive">${formatCurrency(val)}</span></div>`
+        ).join('');
 
         renderAlerts();
     }
 
     function renderAlerts() {
+        const data = filteredData;
         const alerts = [];
-        const totalIn = rawData.filter((r) => r.montant > 0).reduce((s, r) => s + r.montant, 0);
-        const totalOut = Math.abs(rawData.filter((r) => r.montant < 0).reduce((s, r) => s + r.montant, 0));
+        const totalIn = data.filter(r => r.montant > 0).reduce((s, r) => s + r.montant, 0);
+        const totalOut = Math.abs(data.filter(r => r.montant < 0).reduce((s, r) => s + r.montant, 0));
         const net = totalIn - totalOut;
 
         if (net < 0) {
@@ -1156,53 +1097,28 @@
             alerts.push({ type: 'success', text: `Solde net positif (${formatCurrency(net)}). Les encaissements couvrent les décaissements.` });
         }
 
-        // Largest transaction
-        const sorted = [...rawData].sort((a, b) => Math.abs(b.montant) - Math.abs(a.montant));
-        if (sorted[0]) {
-            alerts.push({ type: 'info', text: `Transaction max : ${formatCurrency(sorted[0].montant)} — ${sorted[0].libelle.substring(0, 60)}` });
-        }
+        const sorted = [...data].sort((a, b) => Math.abs(b.montant) - Math.abs(a.montant));
+        if (sorted[0]) alerts.push({ type: 'info', text: `Transaction max : ${formatCurrency(sorted[0].montant)} — ${sorted[0].libelle.substring(0, 60)}` });
 
-        // Unjustified
-        const unjustified = rawData.filter((r) => r.justifie && r.justifie.toLowerCase() === 'non');
+        const unjustified = data.filter(r => r.justifie && r.justifie.toLowerCase() === 'non');
         if (unjustified.length > 0) {
             const tot = unjustified.reduce((s, r) => s + Math.abs(r.montant), 0);
             alerts.push({ type: 'warning', text: `${unjustified.length} transaction(s) non justifiée(s) pour ${formatCurrency(tot)}.` });
         }
 
-        // Concentration risk (by category)
         const topExpCat = Object.entries(
-            rawData.filter(r => r.montant < 0).reduce((acc, r) => {
-                const cat = r.categorie || 'DIVERS';
-                acc[cat] = (acc[cat] || 0) + Math.abs(r.montant);
-                return acc;
-            }, {})
+            data.filter(r => r.montant < 0).reduce((acc, r) => { const cat = r.categorie || 'DIVERS'; acc[cat] = (acc[cat] || 0) + Math.abs(r.montant); return acc; }, {})
         ).sort((a, b) => b[1] - a[1])[0];
-
         if (topExpCat && totalOut > 0) {
             const pct = ((topExpCat[1] / totalOut) * 100).toFixed(1);
-            if (pct > 30) {
-                alerts.push({ type: 'warning', text: `Concentration : « ${topExpCat[0]} » = ${pct}% des décaissements.` });
-            }
+            if (pct > 30) alerts.push({ type: 'warning', text: `Concentration : « ${topExpCat[0]} » = ${pct}% des décaissements.` });
         }
 
-        // Interco volume
-        const intercoTotal = rawData.filter(r => r.categorie === 'Interco').reduce((s, r) => s + Math.abs(r.montant), 0);
-        if (intercoTotal > 0) {
-            alerts.push({ type: 'info', text: `Flux Interco détectés pour un volume de ${formatCurrency(intercoTotal)}.` });
-        }
+        const intercoTotal = data.filter(r => r.categorie === 'Interco').reduce((s, r) => s + Math.abs(r.montant), 0);
+        if (intercoTotal > 0) alerts.push({ type: 'info', text: `Flux Interco : ${formatCurrency(intercoTotal)}.` });
 
-        // SEPA debits
-        const sepa = rawData.filter(r => normUpper(r.libelle).includes('PRLV SEPA'));
-        if (sepa.length > 0) {
-            const tot = sepa.reduce((s, r) => s + Math.abs(r.montant), 0);
-            alerts.push({ type: 'info', text: `${sepa.length} prélèvement(s) SEPA pour ${formatCurrency(tot)}.` });
-        }
-
-        // Fallback / DIVERS count
-        const diversCount = rawData.filter(r => r.categorie === 'DIVERS' || r.ruleHit.includes('Fallback')).length;
-        if (diversCount > 0) {
-            alerts.push({ type: 'warning', text: `${diversCount} transaction(s) classée(s) « DIVERS / Fallback » — à vérifier manuellement.` });
-        }
+        const diversCount = data.filter(r => r.categorie === 'DIVERS' || (r.ruleHit && r.ruleHit.includes('Fallback'))).length;
+        if (diversCount > 0) alerts.push({ type: 'warning', text: `${diversCount} transaction(s) « DIVERS / Fallback » — à vérifier.` });
 
         const iconMap = {
             warning: '<svg class="alert-icon alert-warning" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',
@@ -1210,9 +1126,7 @@
             success: '<svg class="alert-icon alert-success" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>',
         };
 
-        $('#summary-alerts').innerHTML = alerts
-            .map((a) => `<div class="alert-item">${iconMap[a.type]}<span>${escapeHtml(a.text)}</span></div>`)
-            .join('');
+        $('#summary-alerts').innerHTML = alerts.map(a => `<div class="alert-item">${iconMap[a.type]}<span>${escapeHtml(a.text)}</span></div>`).join('');
     }
 
     // ══════════════════════════════════════════════
