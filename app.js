@@ -1018,12 +1018,6 @@
     // ── Aggregate helpers (all use filteredData) ──
     function aggregateByMonth() {
         const months = {};
-        // Use rawData for month labels (to keep consistent x-axis), but compute from filteredData
-        rawData.forEach(r => {
-            if (!r.date || isNaN(r.date.getTime())) return;
-            const key = getMonthKey(r);
-            if (!months[key]) months[key] = { inflows: 0, outflows: 0 };
-        });
         filteredData.forEach(r => {
             if (!r.date || isNaN(r.date.getTime())) return;
             const key = getMonthKey(r);
@@ -1244,16 +1238,11 @@
     // ── Financeur Monthly stacked bar chart ──
     function renderFinanceurMonthlyChart() {
         const months = {};
-        // Collect all months from rawData for consistent x-axis
-        rawData.forEach(r => {
-            if (!r.date || isNaN(r.date.getTime())) return;
-            const mk = getMonthKey(r);
-            if (!months[mk]) months[mk] = { Interco: 0, Public: 0, 'Privé': 0 };
-        });
-        // Fill from filteredData (enc only)
         filteredData.filter(r => r.sens === 'Encaissement' && r.typeFinanceur).forEach(r => {
             const mk = getMonthKey(r);
-            if (mk && months[mk]) months[mk][r.typeFinanceur] += r.montant;
+            if (!mk) return;
+            if (!months[mk]) months[mk] = { Interco: 0, Public: 0, 'Privé': 0 };
+            months[mk][r.typeFinanceur] += r.montant;
         });
 
         const keys = Object.keys(months).sort();
