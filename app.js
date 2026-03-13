@@ -450,6 +450,19 @@
             // 3. Privé (par défaut)
             row.typeFinanceur = 'Privé';
         });
+
+        // Step 5: Mode de paiement (enc only) — from DAX formula
+        data.forEach(row => {
+            if (row.sens !== 'Encaissement') { row.modePaiement = ''; return; }
+            const lib = row._libNorm;
+            if (lib.includes('ALMA')) { row.modePaiement = 'Alma'; return; }
+            if (lib.includes('GO CARDLESS') || lib.includes('GOCARDLESS')) { row.modePaiement = 'GoCardless'; return; }
+            if (lib.includes('STRIPE')) { row.modePaiement = 'Stripe'; return; }
+            if (lib.includes('SOFINCO')) { row.modePaiement = 'Sofinco'; return; }
+            if (lib.includes('CPF')) { row.modePaiement = 'CPF'; return; }
+            if (lib.includes('PAYPAL')) { row.modePaiement = 'PayPal'; return; }
+            row.modePaiement = 'Virement';
+        });
     }
 
     // ══════════════════════════════════════════════
@@ -610,6 +623,7 @@
                 ruleHit: '',
                 sens: '',
                 typeFinanceur: '',
+                modePaiement: '',
             };
         });
 
@@ -674,6 +688,7 @@
         months: null,      // Set of 'YYYY-MM' from date filter bar (null = all selected)
         equipe: null,      // from teams chart click
         financeur: null,   // 'Interco', 'Public', 'Privé' from financeur chart
+        paiement: null,    // 'Alma', 'GoCardless', 'Stripe', etc.
         search: '',        // from search input
         typeDropdown: '',  // from type select
         teamDropdown: '',  // from team select
@@ -692,6 +707,7 @@
             if (crossFilter.month && getMonthKey(r) !== crossFilter.month) return false;
             if (crossFilter.months && !crossFilter.months.has(getMonthKey(r))) return false;
             if (crossFilter.financeur && r.typeFinanceur !== crossFilter.financeur) return false;
+            if (crossFilter.paiement && r.modePaiement !== crossFilter.paiement) return false;
             if (crossFilter.equipe) {
                 const team = r.equipe && r.equipe.trim() ? r.equipe.trim() : 'Non attribué';
                 if (team !== crossFilter.equipe) return false;
@@ -724,12 +740,13 @@
         crossFilter.month = null;
         crossFilter.equipe = null;
         crossFilter.financeur = null;
+        crossFilter.paiement = null;
         // Note: months (date bar) is NOT cleared by "Tout effacer" — it's a separate persistent filter
         refreshDashboard();
     }
 
     function hasCrossFilters() {
-        return crossFilter.categorie || crossFilter.sens || crossFilter.month || crossFilter.equipe || crossFilter.financeur;
+        return crossFilter.categorie || crossFilter.sens || crossFilter.month || crossFilter.equipe || crossFilter.financeur || crossFilter.paiement;
     }
 
     function renderFilterChips() {
@@ -740,10 +757,10 @@
         }
         container.classList.remove('hidden');
 
-        const labels = { categorie: 'Catégorie', sens: 'Sens', month: 'Mois', equipe: 'Équipe', financeur: 'Financeur' };
+        const labels = { categorie: 'Catégorie', sens: 'Sens', month: 'Mois', equipe: 'Équipe', financeur: 'Financeur', paiement: 'Paiement' };
         let html = '<span class="filter-chip-label">Filtres actifs :</span>';
 
-        for (const key of ['categorie', 'sens', 'month', 'equipe', 'financeur']) {
+        for (const key of ['categorie', 'sens', 'month', 'equipe', 'financeur', 'paiement']) {
             if (!crossFilter[key]) continue;
             let display = crossFilter[key];
             if (key === 'month') {
@@ -857,6 +874,7 @@
         renderDecCategoriesChart();
         renderFinanceurChart();
         renderFinanceurMonthlyChart();
+        renderPaiementChart();
         renderTopVendorsChart();
         renderTeamsChart();
         renderTable();
@@ -1177,6 +1195,57 @@
                 onClick: (evt, elements) => {
                     if (!elements.length) return;
                     toggleCrossFilter('month', keys[elements[0].index]);
+                },
+            },
+        });
+    }
+
+    // ── Mode de paiement Chart (enc only) ──
+    const PAIEMENT_COLORS = {
+        'Alma': '#ec4899',      // pink
+        'GoCardless': '#06b6d4', // cyan
+        'Stripe': '#6366f1',    // indigo
+        'Sofinco': '#f97316',   // orange
+        'CPF': '#8b5cf6',       // purple
+        'PayPal': '#3b82f6',    // blue
+        'Virement': '#10b981',  // green
+    };
+
+    function renderPaiementChart() {
+        const modes = {};
+        filteredData.filter(r => r.sens === 'Encaissement' && r.modePaiement).forEach(r => {
+            modes[r.modePaiement] = (modes[r.modePaiement] || 0) + r.montant;
+        });
+
+        const order = ['Alma', 'GoCardless', 'Stripe', 'Sofinco', 'CPF', 'PayPal', 'Virement'];
+        const sorted = order.filter(k => modes[k]).map(k => [k, modes[k]]);
+
+        destroyChart('paiement');
+        if (sorted.length === 0) {
+            const canvas = $('#chart-paiement');
+            if (canvas) canvas.getContext('2d').clearRect(0, 0, 9999, 9999);
+            return;
+        }
+        const ctx = $('#chart-paiement').getContext('2d');
+
+        charts.paiement = new Chart(ctx, {
+            type: 'doughnut',
+            data: {
+                labels: sorted.map(([k]) => k),
+                datasets: [{
+                    data: sorted.map(([, v]) => v),
+                    backgroundColor: sorted.map(([k]) => PAIEMENT_COLORS[k] || '#8b5cf6'),
+                    borderColor: '#1a1428',
+                    borderWidth: 2,
+                    hoverOffset: 6,
+                }],
+            },
+            options: {
+                ...getDoughnutOptions(),
+                onClick: (evt, elements) => {
+                    if (!elements.length) return;
+                    const label = sorted[elements[0].index][0];
+                    toggleCrossFilter('paiement', label);
                 },
             },
         });
