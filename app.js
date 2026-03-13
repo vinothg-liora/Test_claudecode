@@ -14,11 +14,53 @@
     const PAGE_SIZE = 25;
     let charts = {};
 
-    // ── Persistence ──
+    // ── Persistence (IndexedDB — unlimited storage) ──
     const STORAGE_DATA_KEY = 'liora_cf_data';
     const STORAGE_FILES_KEY = 'liora_cf_files';
+    const IDB_NAME = 'liora_cashflow';
+    const IDB_STORE = 'kv';
+    const IDB_VERSION = 1;
 
-    function saveToStorage() {
+    function openDB() {
+        return new Promise((resolve, reject) => {
+            const req = indexedDB.open(IDB_NAME, IDB_VERSION);
+            req.onupgradeneeded = () => { req.result.createObjectStore(IDB_STORE); };
+            req.onsuccess = () => resolve(req.result);
+            req.onerror = () => reject(req.error);
+        });
+    }
+
+    async function idbSet(key, value) {
+        const db = await openDB();
+        return new Promise((resolve, reject) => {
+            const tx = db.transaction(IDB_STORE, 'readwrite');
+            tx.objectStore(IDB_STORE).put(value, key);
+            tx.oncomplete = () => { db.close(); resolve(true); };
+            tx.onerror = () => { db.close(); reject(tx.error); };
+        });
+    }
+
+    async function idbGet(key) {
+        const db = await openDB();
+        return new Promise((resolve, reject) => {
+            const tx = db.transaction(IDB_STORE, 'readonly');
+            const req = tx.objectStore(IDB_STORE).get(key);
+            req.onsuccess = () => { db.close(); resolve(req.result); };
+            req.onerror = () => { db.close(); reject(req.error); };
+        });
+    }
+
+    async function idbDelete(key) {
+        const db = await openDB();
+        return new Promise((resolve, reject) => {
+            const tx = db.transaction(IDB_STORE, 'readwrite');
+            tx.objectStore(IDB_STORE).delete(key);
+            tx.oncomplete = () => { db.close(); resolve(); };
+            tx.onerror = () => { db.close(); reject(tx.error); };
+        });
+    }
+
+    async function saveToStorage() {
         try {
             const serializable = rawData.map(r => {
                 const { _libNorm, _tiersNorm, ...clean } = r;
@@ -27,20 +69,18 @@
                     date: r.date ? r.date.toISOString() : null,
                 };
             });
-            const json = JSON.stringify(serializable);
-            localStorage.setItem(STORAGE_DATA_KEY, json);
+            await idbSet(STORAGE_DATA_KEY, serializable);
             return true;
         } catch (e) {
-            console.error('Impossible de sauvegarder dans localStorage:', e.message);
+            console.error('Impossible de sauvegarder dans IndexedDB:', e.message);
             return false;
         }
     }
 
-    function loadFromStorage() {
+    async function loadFromStorage() {
         try {
-            const json = localStorage.getItem(STORAGE_DATA_KEY);
-            if (!json) return [];
-            const arr = JSON.parse(json);
+            const arr = await idbGet(STORAGE_DATA_KEY);
+            if (!arr) return [];
             return arr.map(r => ({
                 ...r,
                 date: r.date ? new Date(r.date) : new Date(0),
@@ -50,22 +90,39 @@
         }
     }
 
-    function getFileHistory() {
+    async function getFileHistory() {
         try {
-            const json = localStorage.getItem(STORAGE_FILES_KEY);
-            return json ? JSON.parse(json) : [];
+            const h = await idbGet(STORAGE_FILES_KEY);
+            return h || [];
         } catch { return []; }
     }
 
-    function addFileHistory(name, rowCount) {
-        const history = getFileHistory();
+    async function addFileHistory(name, rowCount) {
+        const history = await getFileHistory();
         history.push({ name, rowCount, date: new Date().toISOString() });
-        try { localStorage.setItem(STORAGE_FILES_KEY, JSON.stringify(history)); } catch {}
+        try { await idbSet(STORAGE_FILES_KEY, history); } catch {}
     }
 
-    function clearAllHistory() {
-        localStorage.removeItem(STORAGE_DATA_KEY);
-        localStorage.removeItem(STORAGE_FILES_KEY);
+    async function clearAllHistory() {
+        await idbDelete(STORAGE_DATA_KEY);
+        await idbDelete(STORAGE_FILES_KEY);
+    }
+
+    // Migrate from localStorage to IndexedDB (one-time)
+    async function migrateFromLocalStorage() {
+        try {
+            const json = localStorage.getItem(STORAGE_DATA_KEY);
+            if (!json) return;
+            const arr = JSON.parse(json);
+            await idbSet(STORAGE_DATA_KEY, arr);
+            const filesJson = localStorage.getItem(STORAGE_FILES_KEY);
+            if (filesJson) await idbSet(STORAGE_FILES_KEY, JSON.parse(filesJson));
+            localStorage.removeItem(STORAGE_DATA_KEY);
+            localStorage.removeItem(STORAGE_FILES_KEY);
+            console.log('Migration localStorage → IndexedDB terminée.');
+        } catch (e) {
+            console.warn('Migration localStorage échouée:', e);
+        }
     }
 
     /** Deduplicate: two rows are considered the same if date+libelle+montant+tiers match */
@@ -641,39 +698,36 @@
             };
         });
 
-        // Merge with existing historical data
-        const existingData = loadFromStorage();
-        if (existingData.length > 0) {
-            // Re-categorize existing data is not needed — already done
-            rawData = existingData;
-        } else {
-            rawData = [];
-        }
-
-        const added = mergeData(rawData, newRows);
-
-        // Run categorization on ALL data (re-run ensures consistency)
-        $('#loader-status').textContent = 'Catégorisation des transactions...';
-        setTimeout(() => {
-            categorizeAll(rawData);
-
-            // Save merged data + file history
-            const saved = saveToStorage();
-            if (saved) {
-                addFileHistory(fileName || 'fichier', added);
+        // Merge with existing historical data (async)
+        loadFromStorage().then(existingData => {
+            if (existingData.length > 0) {
+                rawData = existingData;
             } else {
-                alert('Attention : les données dépassent la capacité de stockage du navigateur. L\'historique pourrait ne pas être conservé au prochain chargement. Pensez à effacer l\'ancien historique si nécessaire.');
+                rawData = [];
             }
 
-            filteredData = [...rawData];
+            const added = mergeData(rawData, newRows);
+
+            // Run categorization on ALL data (re-run ensures consistency)
+            $('#loader-status').textContent = 'Catégorisation des transactions...';
+            setTimeout(() => {
+                categorizeAll(rawData);
+
+                // Save merged data + file history
+                saveToStorage().then(saved => {
+                    if (saved) addFileHistory(fileName || 'fichier', added);
+                });
+
+                filteredData = [...rawData];
 
             $('#loader-status').textContent = `Génération du tableau de bord... (${added} nouvelles lignes ajoutées)`;
-            setTimeout(() => {
+            setTimeout(async () => {
                 buildDashboard();
-                renderFileHistory();
+                await renderFileHistory();
                 showScreen('dashboard');
             }, 400);
         }, 300);
+        }); // end loadFromStorage().then
     }
 
     function parseDate(str) {
@@ -1641,9 +1695,9 @@
     });
 
     // ── Clear All History Button ──
-    $('#btn-clear-history').addEventListener('click', () => {
+    $('#btn-clear-history').addEventListener('click', async () => {
         if (!confirm('Supprimer tout l\'historique des données importées ?')) return;
-        clearAllHistory();
+        await clearAllHistory();
         rawData = [];
         filteredData = [];
         currentPage = 1;
@@ -1651,7 +1705,7 @@
         fileInput.value = '';
         $('#file-info').classList.add('hidden');
         window._selectedFile = null;
-        renderFileHistory();
+        await renderFileHistory();
         showScreen('upload');
     });
 
@@ -1659,10 +1713,10 @@
     $('#btn-export').addEventListener('click', () => { window.print(); });
 
     // ── File History Rendering ──
-    function renderFileHistory() {
+    async function renderFileHistory() {
         const container = $('#file-history');
         if (!container) return;
-        const history = getFileHistory();
+        const history = await getFileHistory();
         if (history.length === 0) {
             container.classList.add('hidden');
             return;
@@ -1682,19 +1736,19 @@
         container.innerHTML = html;
     }
 
-    // ── Auto-load from localStorage on startup ──
-    (function autoLoad() {
-        const stored = loadFromStorage();
+    // ── Auto-load from IndexedDB on startup ──
+    (async function autoLoad() {
+        await migrateFromLocalStorage();
+        const stored = await loadFromStorage();
         if (stored.length > 0) {
             rawData = stored;
-            // Re-run categorization to ensure consistency
             categorizeAll(rawData);
             filteredData = [...rawData];
             buildDashboard();
-            renderFileHistory();
+            await renderFileHistory();
             showScreen('dashboard');
         } else {
-            renderFileHistory();
+            await renderFileHistory();
         }
     })();
 
@@ -1804,7 +1858,7 @@
             sel.addEventListener('change', updateBulkBtn);
         });
 
-        bulkBtn.onclick = () => {
+        bulkBtn.onclick = async () => {
             const selects = tbody.querySelectorAll('.dq-select');
             const toApply = [];
             selects.forEach(sel => {
@@ -1818,7 +1872,7 @@
                 row.manualCategory = cat;
                 row.ruleHit = 'DQ: Reclassement manuel';
             });
-            saveToStorage();
+            await saveToStorage();
             computeFilteredData();
             renderDataQuality();
             refreshDashboard();
