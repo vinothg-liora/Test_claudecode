@@ -1764,16 +1764,18 @@
         $('#dq-count-divers').textContent = diversRows.length;
         $('#dq-count-autres').textContent = autresRows.length;
 
-        renderDqTable('dq-body-divers', diversRows, DEC_CATEGORIES);
-        renderDqTable('dq-body-autres', autresRows, ENC_CATEGORIES);
+        renderDqTable('dq-body-divers', diversRows, DEC_CATEGORIES, 'dq-bulk-divers');
+        renderDqTable('dq-body-autres', autresRows, ENC_CATEGORIES, 'dq-bulk-autres');
     }
 
     $('#dq-filter-month').addEventListener('change', renderDataQuality);
 
-    function renderDqTable(tbodyId, rows, categories) {
+    function renderDqTable(tbodyId, rows, categories, bulkBtnId) {
         const tbody = document.getElementById(tbodyId);
+        const bulkBtn = document.getElementById(bulkBtnId);
         if (rows.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="6" class="dq-empty">Aucune transaction à reclasser.</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="4" class="dq-empty">Aucune transaction à reclasser.</td></tr>`;
+            bulkBtn.disabled = true;
             return;
         }
         tbody.innerHTML = '';
@@ -1786,46 +1788,43 @@
             tr.innerHTML = `
                 <td>${escapeHtml(row.dateStr || '')}</td>
                 <td class="dq-cell-libelle">${escapeHtml(row.libelle)}</td>
-                <td>${escapeHtml(row.tiers || '')}</td>
                 <td class="text-right" style="white-space:nowrap">${formatCurrency(row.montant)}</td>
                 <td><select class="dq-select" data-idx="${idx}"><option value="">— Choisir —</option>${options}</select></td>
-                <td><button class="dq-btn-apply" data-idx="${idx}" disabled>Appliquer</button></td>
             `;
             tbody.appendChild(tr);
         });
 
-        // Wire up select → enable button
+        function updateBulkBtn() {
+            const anyFilled = tbody.querySelector('.dq-select') &&
+                [...tbody.querySelectorAll('.dq-select')].some(s => s.value);
+            bulkBtn.disabled = !anyFilled;
+        }
+
         tbody.querySelectorAll('.dq-select').forEach(sel => {
-            sel.addEventListener('change', () => {
-                const btn = tbody.querySelector(`.dq-btn-apply[data-idx="${sel.dataset.idx}"]`);
-                btn.disabled = !sel.value;
-            });
+            sel.addEventListener('change', updateBulkBtn);
         });
 
-        // Wire up apply buttons
-        tbody.querySelectorAll('.dq-btn-apply').forEach(btn => {
-            btn.addEventListener('click', () => {
-                const idx = parseInt(btn.dataset.idx);
-                const sel = tbody.querySelector(`.dq-select[data-idx="${idx}"]`);
-                if (!sel || !sel.value) return;
-                applyDqReclassification(idx, sel.value);
+        bulkBtn.onclick = () => {
+            const selects = tbody.querySelectorAll('.dq-select');
+            const toApply = [];
+            selects.forEach(sel => {
+                if (sel.value) toApply.push({ idx: parseInt(sel.dataset.idx), cat: sel.value });
             });
-        });
+            if (toApply.length === 0) return;
+            toApply.forEach(({ idx, cat }) => {
+                const row = rawData[idx];
+                if (!row) return;
+                row.categorie = cat;
+                row.manualCategory = cat;
+                row.ruleHit = 'DQ: Reclassement manuel';
+            });
+            saveToStorage();
+            computeFilteredData();
+            renderDataQuality();
+            refreshDashboard();
+        };
     }
 
-    function applyDqReclassification(rawIdx, newCategory) {
-        const row = rawData[rawIdx];
-        if (!row) return;
-        row.categorie = newCategory;
-        row.manualCategory = newCategory;
-        row.ruleHit = 'DQ: Reclassement manuel';
-
-        saveToStorage();
-        computeFilteredData();
-        renderDataQuality();
-        // Dashboard will refresh when user switches back, but also update in background
-        refreshDashboard();
-    }
 
     // ── Mouse glow ──
     document.addEventListener('mousemove', (e) => {

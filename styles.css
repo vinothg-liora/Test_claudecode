@@ -1313,26 +1313,35 @@ body::before {
 .dq-cell-libelle {
     word-break: break-word;
     white-space: normal;
-    min-width: 300px;
+    min-width: 450px;
+    max-width: 600px;
 }
-.dq-btn-apply {
-    padding: 0.35rem 0.75rem;
+.dq-th-libelle {
+    min-width: 450px;
+}
+.dq-section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+}
+.dq-btn-bulk {
+    padding: 0.5rem 1.2rem;
     background: var(--accent);
     color: #fff;
     border: none;
-    border-radius: var(--radius-sm);
-    font-family: 'Inter', sans-serif;
-    font-size: 0.75rem;
-    font-weight: 600;
+    border-radius: 6px;
     cursor: pointer;
-    transition: opacity 0.15s;
+    font-weight: 600;
+    white-space: nowrap;
+    transition: opacity 0.2s;
 }
-.dq-btn-apply:hover {
-    opacity: 0.85;
-}
-.dq-btn-apply:disabled {
+.dq-btn-bulk:disabled {
     opacity: 0.4;
     cursor: not-allowed;
+}
+.dq-btn-bulk:not(:disabled):hover {
+    opacity: 0.85;
 }
 .dq-empty {
     color: var(--text-muted);
