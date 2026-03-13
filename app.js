@@ -1,6 +1,7 @@
 /* ============================
    Liora Cash Flow Analyzer
    Main Application Logic
+   v6.2.1h — Categorization Engine
    ============================ */
 
 (function () {
@@ -23,15 +24,354 @@
         dashboard: $('#dashboard-screen'),
     };
 
-    // ── Column Mapping ──
-    // We normalize column names to handle slight variations
+    // ══════════════════════════════════════════════
+    //  CATEGORIZATION ENGINE (translated from Python v6.2.1h)
+    // ══════════════════════════════════════════════
+
+    // ── Helpers: accent stripping & normalization ──
+    function stripAccents(s) {
+        if (typeof s !== 'string') return '';
+        return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    }
+
+    function normUpper(s) {
+        if (s == null) s = '';
+        s = String(s);
+        s = stripAccents(s).toUpperCase();
+        s = s.replace(/\s+/g, ' ').trim();
+        return s;
+    }
+
+    function containsAnyDual(textNorm, keywords) {
+        if (typeof textNorm !== 'string') return false;
+        const up = textNorm;
+        const noacc = stripAccents(up);
+        for (const kw of keywords) {
+            const k = kw.toUpperCase();
+            if (up.includes(k) || noacc.includes(k)) return true;
+        }
+        return false;
+    }
+
+    // ── Person detection ──
+    const CIV_RE = /\b(M\.?|MR|MME|MADAME|MADEMOISELLE|MLLE|MLE|MONSIEUR)\b/i;
+
+    const FIRSTNAMES_EXTRA = new Set([
+        'YOUSEF','YOUSSEF','PRISCILLIA','MARTA','ALEJANDRA','GUILLAUME','KATIA','DIALLO','AMINE','WILFRIED',
+        'YASMINE','VLADISLAV','SAMUEL','OUALID','WALID','MAROUANE','MAHDI','AURORE','JEAN-RAPHAEL','DENIS',
+        'ABDOULAYE','HASSAN','HORACE','GUSTAVE','ALESSANDRO','FARIS','CYRIELLE','JEAN-PAUL','THIBAUT',
+    ].map(x => stripAccents(x).toUpperCase()));
+
+    function looksLikePerson(textNorm) {
+        if (CIV_RE.test(textNorm)) return true;
+
+        let toks = stripAccents(textNorm).toUpperCase().split(/\s+/).filter(t => /^[A-Z]+$/i.test(t));
+        for (let i = 0; i < toks.length - 1; i++) {
+            if (FIRSTNAMES_EXTRA.has(toks[i]) || FIRSTNAMES_EXTRA.has(toks[i + 1])) return true;
+        }
+
+        const m = textNorm.match(/\/FRM\s+([^/]+)/i);
+        if (m) {
+            const part = normUpper(m[1]);
+            const toks2 = stripAccents(part).toUpperCase().split(/\s+/).filter(t => /^[A-Z]+$/i.test(t));
+            for (let i = 0; i < toks2.length - 1; i++) {
+                if (FIRSTNAMES_EXTRA.has(toks2[i]) || FIRSTNAMES_EXTRA.has(toks2[i + 1])) return true;
+            }
+        }
+        return false;
+    }
+
+    // ── Keyword dictionaries ──
+
+    // Encaissements
+    const INTERCO_ENC_KEYS = [
+        'TRESO','TRESORERIE','AFORSSIC','FORSSIC','VIREMENT COMPENSE','DST GERMANY',
+        'APPROVISIONNEMENT','DEBIT MENSUEL CARTE BLEUE','COMPTE PRO','APPRO','PRELEVEMENT AUTOMATIQUE',
+        'AMERICAN EXPRESS CARTE','AMERICAN EXPRESS CARTE-FRANCE','TRESORERIE',
+    ];
+
+    const OPCO_KEYS = [
+        'AFDAS','ATLAS','OCAPIAT','UNIFORMATION','CONSTRUCTYS',"L'OPCOMMERCE",'OPCOMMERCE','AKTO','OPCO2I',
+        'OPCO MOBILITES','OPCO EP','OPCO SANTE',
+    ];
+
+    const CPF_KEYS = ['CPF','CAISSE DES DEPOTS'];
+
+    const RECONV_KEYS = [
+        'TRANSITIONS PRO','REGION','FRANCE TRAVAIL','POLE EMPLOI','NOUVELLE-AQUITAINE','METROPOLE','VILLE',
+        'COMMUNE','MEURTHE-ET-MOSELLE','SOMME','CENTRE ET LOIRET','VAL DE SEINE','YVELINES','DORDOGNE',
+        'NORMANDIE','OCCITANIE','VAL DE SAONE','LOIRET',
+    ];
+
+    const B2B_EXTRA = [
+        'AEROPORTS','AEROPORT','ELUSDIF','DELANE SI','MANUFACTURE','ACTEMIK','WADAM-IT','24 SEVRES','ADME',
+        'ADWAY','GIRONDIN','AIR AUSTRAL','ALBA UP','ALBINGIA','AUBAY','AVELOOK','CHRU','CHRS','RHODIA','COTE FLUX',
+        'CREDIT AGRICOLE','DEPIXUS','EASYDIS','ECHOSENS','ECO CO2','FACILITY PARK','FIOULMARKET',
+        'MAINTENANCE','FLOCA','GUILDE DES LUNETIERS','HIGH CO BOX','HUTCHINSON','LIAISONS','LONG PLAY','GAMBLING',
+        'SIEGE','NEOLITHE','NERABIS','FILTRATION','OLINDA','ONASOFT','OODRIVE','OPEN BEE','ORTHO-CARAIBES',
+        'PLACE DE LA','PONTOON','POSOS','PRAEMIA','PRELIGENS','PRODISER','PROXISERVE','QUANTUM','RANDSTAD','REALITES',
+        'RENTR','RESEAU CANOPE','INDUSTRIE','SCALIAN','SELARL FIDES','SIACI SAINT HONORE','COMPOSITE','TISSIUM',
+        'TYRES','VALRHONA','VEDICOM','LEARNQUEST','WINKO','ORANGE','LHH','NOOUS','SODEXO','LE PUY DU FOU',
+        'LIGUE NATIONALE','DOMIS','MUTUELLES','MY MONEY BANK','METRO','SAPMER','CONSUMER FINANCE','GOLDEN BEES',
+        'ALIXIO','SIMPLON','MANPOWER','DACODE','CEREMA','INVEST','SALSIFY','IZNES','SOCIETE DE GESTION',
+        'MANCHE NUMERIQUE','TILD','SOCFIM','BUSINESS SOLUTIONS','PHARMA','FUTUROSOFT','HUSQVARNA','ASNR',
+        'NEXITY','COMMISSARIAT','HEALTHCARE','TEKSIALCSTA','FRANPRIX','WEBCHECK','VERTUO','SANDVIK',
+        'CONSTRUCTION','POS CONNECT','SYNERINTERNATIONALGIE','APICIL','GROUPE','IT SERVICES',
+        'SYSTEMES ET TELECOMMUNICATIONS','DISNEY','ANTARGAZ','INTERNATIONAL','WIRING SYSTEMS','SOCIETE GENERALE',
+        'LP GROUPE','LDLC FINANCE','PROFESSION SANTE','NIIT IRELAND','ALLIANZ','ALSO FRANCE','ENGIE','VINCI',
+        'CASTORAMA','VENATHEC','MOODY','DISTRIBUTION','AIA INGENIERIE','SOLIDARITES ET SANTE','ELOGEN',
+        'CAMCA MUTUELLE','LISEA','STE CCAS',
+        'ORSYS','ARCELORMITTAL','SAINT-GOBAIN','SELARL','ASSURANCES','BUROK TECH','WORLDLINE FRANCE',
+        'ARS HAUTS DE FRANCE','GIVENCHY','USSEL','SMART','CONSULTING','CORETAB','MISTERTEMP','SMILE','AXYLIS',
+        'ARAQIM','CONECS','G3 SERVICE','INRAE','SIDEV','MALTA','LUMINESS','ASSISTANCE','LIVESTORM',
+        'OLYMPIQUE LYONNAIS','YZICO','ICON FRANCE','CANDEX','XELIANS','AVITUM','MACIF','PERNOD RICARD',
+        'CNMSS','LEAKMITED','ACCENTURE','AVANADE','DCM 075','ICAPE','PASS CULTURE','SYSTEMGIE','MNH1',
+        'FORMIRIS','SPARKS',
+    ];
+
+    const B2C_PSP = ['ALMA','GOCARDLESS','STRIPE'];
+
+    const AUTRES_REV_KEYS = ['CPAM','AIDE','SUBVENTION'];
+
+    // Décaissements
+    const INTERCO_DEC_KEYS = [
+        'TRESO','TRESORERIE','AFORSSIC','FORSSIC','VIREMENT COMPENSE','DST GERMANY','ALIMENTATION SPENDESK',
+        'DEBIT MENSUEL CARTE BLEUE','APPRO SPDSK','APPRO PENNY','TRESORERIE','REGUL','REGULARISATION',
+        'TRESORERIE','REGULARISATION','AMERICAN EXPRESS CARTE','AMERICAN EXPRESS CARTE-FRANCE',
+    ];
+
+    const BANQUES_DETTES_KEYS = [
+        'FRAIS VIREMENT',"FRAIS AVIS D'OPERE",'DOMICILIATION INCOMPLETE','DONT HORS TAXE','COMMISSION',
+        'COMMISSIONS','PRET','INTERETS','INTERET','BPIFRANCE FINANCEMENT','TRANSACTION CARTE',
+        'FRAIS DE CHANGE','CARD TRANSACTION IN FOREIGN CURRENCY','COTISATION MULTIPRO','ECART RAPPRO',
+        'BPIFRANCE','CHEQUE IMPAYE','COTISATION','FRAIS','INTERETS','SWAN - TRANSACTION',
+    ];
+
+    const FGS_KEYS = [
+        'ORANGE','FREE','AMAZON PAYMENTS','LA POSTE','ENDESA ENERGIA','EDF','ENGIE','GRDF','AMAZON EU SARL','AMZN',
+        'NESPRESSO','CULLIGAN','KAWA','ARVAL SERVICE LEASE','CREDIPAR','MAILEVA','GSF.PROPRETE','GSF GRANDE ARCHE',
+        'CIAMT','CAR WASH','VINCI','ELF','ALIEXPRESS','ALIMENTATION','ALLENBY','ALLISON PNEUS','AMAZON PRIME',
+        'AMAZON.FR*','AUTOROUTE','AUCHAN','BNP PARIBAS LEASE','CARREFOUR','CHRONOPOST','COFIROUTE','COPY TOP',
+        'E.LECLERC','EASY CHARGE','ESSO','FNAC','FORF P.STAT','FRANPRIX','GARAGE','MAXSOCIETE','IKEA','INDIGO',
+        'LEBONCOIN','LETTRE24','EVCHARGE','OBJETRAMA','RAKUTEN','ROXY COPY','ROX COPY','SAPN','AMENDE','SACEF',
+        'CRECHE','LE VERGER DE GALLY','SNP*MLG EVENTS','CARROSSERIE','AUTOMOBILES','VISTAPRINT','IMPRIMERIE',
+    ];
+
+    const NOTES_FRAIS_KEYS = [
+        'SNCF-VOYAGEURS','HOTEL','AIRBNB','UBER','NOTES DE FRAIS','RESTAURANT','RESTAURANTS','TRANSPORT',
+        'DELIVEROO','DAILY DEFENSE','IBIS','TOUR I','SERVICE NAVIGO','YBRY KASH','LIORIM','MAIRIE DE PARIS',
+        'LE BAZAR','W.A.X','SUPERMARCHE','TAXI','POLLY MAGGO','FONDUE ZHANGGE','1ERE CLASSE','API RESTAURATION',
+        'AFILAL LARBI','API 01161','ASTERIX','ASIATI K','ATELIERNIEL','AU DELICE','AYEL','BABAIT','BASSAR',
+        'BBV-MEATPACKING','BEKEF','BELIB','BENSON KFE','BILLY','BIOBURGER','BOMB SQUAD','BOOKING.COM',
+        'BOUCHERIE','BOULANGERIE','BP DAC','BP PUTEAUX','BURGER KING','CAFE HOCHE','BUDDIE','CANOE','RESTO',
+        'CHARLES PATISSI','CERTAS','CHEZ INOUN','CHEZ FRANCK','CHOCOLAT','INTERFLORA','COMMANDE','SUSHI',
+        'CTOIR PRINCIPAL','CT PAY','COUT ESPLANADE','DAMYEL','DAV AND JO','DECATHLON','DELICES D\'ASNIE',
+        'DELMAMA','DIFFORT','DIVAN DU MONDE','DORON NIEL','DORON SPONTINI','DS CAFE DEFENSE','EL AL','ENVATO',
+        'EUROPCAR','VEVOR','FRAISE D AMOUR','FUNBOOKER','GETAROUND','GRAMI','GRILL BAR','HC MONTEVIDEO',
+        'RESTAURATIO','HYPER BOULOGNE','IL CONTE','IOSSA','JACOB MEATPACKE','JEFF DE BRUGES','JEYM',
+        'JETBRAINS','KAHN FAMOUS DEL','KANTEEN','KAVOD','KEOLIS LYON','KING DAVID','KOOKIE PARIS','L ABREUVOIR',
+        'L ATELIER DELI','L&L GEORGES','LA BELLE EPOQUE','LA CABANE','LA CREME DES','LA GARGAMELLE','LA RECREE',
+        'LA VILLA K','L\'AS DU FALLAFE','LE DUPLEX','LE GAY LUSSAC','LE JULYANN','LE SAFRANE','LE STUDIO','LE XXV',
+        'LE YAD','LES DELICES','LES GARCONS','LES ZOUZOUS','LEVAPARC','CAFFE','LIOR','LIVIO','LS MOMENTO',
+        'LW-BILLETWEB','MAISON','MARCEAU RIVE','SANDWICH','MONDIAL RELAY','MOSES DELI','MSFT *','NYX*CASCADE',
+        'NACHOS','OCTOPUSMIND','PIZZA','PAIN','OTTER*','P COMME PAPILLE','PAPA','VOYAGES','PARIS DEFENSE',
+        'PAVILLON DU LAC','PHCIE','PHOTOMATON','POINCARE DISTRI','PICTO','PUB SAINT JOHN\'S','RATP','QPLD','RIMONE',
+        'RODCHENKO','RNG26','ROSETTA','SABA','SARL DAV','SARL MAISON','MISTER GARDE','SENDINBLUE','SNCF',
+        'STAT AVIA','STATPBPHONEVILL','SUMUP','TAMIN','TOTAL','UBR*','ZETTLE',
+    ];
+
+    const PREVOYANCE_KEYS = ['ABEILLE VIE','MALAKOFF HUMANIS','HENNER','AXA','ALLIANZ','GSA ASSURANCES','HUMANIS PREVOYANCE'];
+
+    const SAAS_IT_KEYS = [
+        'GOOGLE SERVICES','GSUITE','MICROSOFT','IONOS','AMAZON WEB SERVICES','NOTION LABS','ADOBE','OPENAI',
+        'SNOWFLAKE','STAPE','STREAMYARD','FACTORIALHR','SUPERPROF','YOAST','WELCOME TO THE JUNGLE','CAPCUT',
+        'SMSFACTOR','SEMRUSH','TRYHACKME','BALSAMIQ','CALENDLY','SERPAPI','CLAUDE.AI','PADDLE.NET','ARTIFEX',
+        'TYPEFORM','MAKE.COM','RINGOVER','IMAGIFY','CRAZY EGG.COM','WIFIRST','APPLE.COM','UDEMY','INOREADER',
+        'SCALEWAY','ZOOM','ABONNEMENT KASP','ADA4MONTH','AGICAP','ZAPIER','ASANA','ARTICULATE GLOBAL',
+        'ATLASSIAN','AWS EMEA','BACK MARKET','MONDAY.COM','BOTPRESS.COM','BOONDMANAGER','BOTSPACE','CANVA',
+        'CLASSMARKER','DARTY','DELL','DIGIREACH SOLUTIONS','GODADDY','DOCUSIGN','FISIO','FIVERR','FORMCRAFTS',
+        'GITHUB','GOCARDLESS','GOOGLE CLOUD','ZOHO-INVOICE','HEYGEN TECHNOLOGY INC.','HUAWEI','HUBSPOT','KAHOOT!',
+        'LEMLIST','LIVESTORM','MEETUP','METRICOOL.COM','MIDJOURNEY','OVH','PANDADOC','STRIPE','SAMSUNG',
+        'SALESFORCE','SKILLABLE','SLACK','SURVICATE','SURVEYMONKEY','GOOGLE*CLOUD','LINKTREE','EDUSIGN','DATADOG',
+        'YAMM','ONLINEFORMAPRO',
+    ];
+
+    const MKT_ACQ_KEYS = [
+        'GOOGLE IRELAND','TIKTOK','CRITEO','LINKEDIN','META','FACEBOOK','INDEED','REDDIT','FACEBK',
+        'LINKODY','GOOGLE *ADS','ADWORDS',
+    ];
+
+    const URSSAF_KEYS = ['URSSAF'];
+
+    const PA_ACAD_KEYS = ['SORBONNE','MINES','PEARSON','GILMORE','EDITIONS ENI','BUREAU.VERITAS','UNIVERSITE','XVOUCHER'];
+
+    const FF_GEN_KEYS = ['CONSEIL','CONSULTING','CABINET','COURTAGE'];
+
+    const FF_SPECIFIC_KEYS = [
+        'REEL ECH','SECHE ARTHUR','SLOAN','IT TRAININGS','AFRICAN DEVELOPMENT ENGINEERING','FCIT NEW GENERATION',
+        'SECOPS GUARD SOLUTIONS','IT TRAININGS ETS','ICPF ECH','AGENCE KEACREA','NATHANIEL COHN','ATHLAN STEPHANIE',
+        'RAMISARIJAONA','BE API','MEDIATION SOLUTION','PALOOMA','NGUETI MANFO','GHISLAINE BEN CHEMOUL',
+        'ELBAZ RAPHAEL','MEVENGUE BERNARD',
+    ];
+
+    const REMBOURSEMENT_KEYS = ['RMBT','REMB','REMBOURSEMENT','RMB'];
+
+    const SALAIRES_HINTS = ['INDEMN. KM.','INDEMNIT','SALAIRE'];
+    const SALAIRES_REGEX_PID5 = /VIR\s*SEPA\s*EMIS\b.*?\/PID[:\s-]*\d{5}\b/i;
+
+    const LOYERS_KEYS = ['SVENSKASAGAX','ESSET','KEY SENSE'];
+
+    const AUTRES_IMPOTS_KEYS = ['CVAE','TAXE FONCIERE','CFE'];
+
+    const FF_REGEX_PENNYLANE = /\bPENNYLANE-[A-Z0-9]+\b/;
+    const FF_REGEX_PID_PENNYLANE = /\bPID\s+PENNYLANE\b/;
+
+    // ── FILIZ special case ──
+    function isFilizB2B(tiersNorm, libNorm) {
+        return tiersNorm.includes('FILIZ') && !containsAnyDual(libNorm, OPCO_KEYS);
+    }
+
+    // ── Encaissements categorization ──
+    function categoriseEnc(libNorm, tiersNorm) {
+        const both = libNorm + ' || ' + tiersNorm;
+        if (containsAnyDual(both, INTERCO_ENC_KEYS)) return ['Interco', 'Enc: Interco'];
+        if (containsAnyDual(libNorm, OPCO_KEYS)) return ['Alternance (OPCO)', 'Enc: OPCO'];
+        if (containsAnyDual(libNorm, CPF_KEYS)) return ['CPF', 'Enc: CPF'];
+        if (containsAnyDual(libNorm, RECONV_KEYS)) return ['Reconversion', 'Enc: Reconversion'];
+        if (containsAnyDual(both, B2B_EXTRA) || isFilizB2B(tiersNorm, libNorm)) return ['B2B', 'Enc: B2B'];
+        if (containsAnyDual(libNorm, B2C_PSP) || looksLikePerson(libNorm) || looksLikePerson(tiersNorm)) return ['B2C', 'Enc: B2C'];
+        if (containsAnyDual(libNorm, AUTRES_REV_KEYS)) return ['Autres revenus', 'Enc: Autres revenus'];
+        return ['Autres revenus', 'Enc: Fallback'];
+    }
+
+    // ── Décaissements categorization ──
+    function categoriseDec(libNorm) {
+        if (containsAnyDual(libNorm, INTERCO_DEC_KEYS)) return ['Interco', 'Dec: Interco'];
+        if (containsAnyDual(libNorm, BANQUES_DETTES_KEYS)) return ['Banques/Dettes', 'Dec: Banques/Dettes'];
+        if (libNorm.includes('DGFIP') && (libNorm.includes('TS-') || libNorm.includes('TS1-')))
+            return ['Taxe sur les salaires', 'Dec: DGFIP TS/TS1'];
+        if (libNorm.includes('DGFIP') && libNorm.includes('PASDSN'))
+            return ['Prélèvement à la source (PAS)', 'Dec: PAS'];
+        if (containsAnyDual(libNorm, FGS_KEYS)) return ['Frais généraux & services', 'Dec: FGS'];
+        if (containsAnyDual(libNorm, NOTES_FRAIS_KEYS)) return ['Note de frais', 'Dec: Note de frais'];
+        if (containsAnyDual(libNorm, PREVOYANCE_KEYS)) return ['Prévoyance / Mutuelle', 'Dec: Prevoyance/Mutuelle'];
+        if (libNorm.includes('PLUXEE')) return ['Ticket restaurant', 'Dec: Ticket restaurant'];
+        if (containsAnyDual(libNorm, SAAS_IT_KEYS)) return ['SaaS/IT', 'Dec: SaaS/IT'];
+        if (containsAnyDual(libNorm, MKT_ACQ_KEYS)) return ['Marketing & Acquisition', 'Dec: Marketing/Acquisition'];
+        if (containsAnyDual(libNorm, URSSAF_KEYS)) return ['URSSAF', 'Dec: URSSAF'];
+        if (containsAnyDual(libNorm, PA_ACAD_KEYS)) return ['Partenariat académique', 'Dec: Partenariat academique'];
+        if (containsAnyDual(libNorm, FF_GEN_KEYS) || containsAnyDual(libNorm, FF_SPECIFIC_KEYS) ||
+            FF_REGEX_PENNYLANE.test(libNorm) || FF_REGEX_PID_PENNYLANE.test(libNorm))
+            return ['Formateurs / Freelances', 'Dec: Formateurs/Freelances'];
+        if (containsAnyDual(libNorm, REMBOURSEMENT_KEYS)) return ['Remboursement', 'Dec: Remboursement'];
+        if (containsAnyDual(libNorm, SALAIRES_HINTS) || SALAIRES_REGEX_PID5.test(libNorm))
+            return ['Salaires', 'Dec: Salaires'];
+        if (containsAnyDual(libNorm, LOYERS_KEYS)) return ['Loyers & charges', 'Dec: Loyers & charges'];
+        if (containsAnyDual(libNorm, AUTRES_IMPOTS_KEYS)) return ['Autres impôts', 'Dec: Autres impots'];
+        return ['DIVERS', 'Dec: Fallback'];
+    }
+
+    // ── Main categorization pipeline ──
+    function categorizeAll(data) {
+        // Step 1: baseline categorization
+        data.forEach(row => {
+            const libNorm = normUpper(row.libelle);
+            const tiersNorm = normUpper(row.tiers);
+            row._libNorm = libNorm;
+            row._tiersNorm = tiersNorm;
+            row.sens = row.montant > 0 ? 'Encaissement' : (row.montant < 0 ? 'Décaissement' : 'Neutre');
+
+            if (row.sens === 'Encaissement') {
+                const [cat, rule] = categoriseEnc(libNorm, tiersNorm);
+                row.categorie = cat;
+                row.ruleHit = rule;
+            } else if (row.sens === 'Décaissement') {
+                const [cat, rule] = categoriseDec(libNorm);
+                row.categorie = cat;
+                row.ruleHit = rule;
+            } else {
+                row.categorie = 'Neutre';
+                row.ruleHit = 'Neutre';
+            }
+        });
+
+        // Step 2: Anti-regression — formes juridiques → B2B (enc only, sauf GOCARDLESS SAS)
+        const formsRe = /\b(SAS|SARL|EURL|SA)\b/;
+        const excRe = /GOCARDLESS\s+SAS/;
+        data.forEach(row => {
+            if (row.sens === 'Encaissement' && formsRe.test(row._libNorm) && !excRe.test(row._libNorm)) {
+                row.categorie = 'B2B';
+                row.ruleHit = 'Enc: Anti-reg formes juridiques';
+            }
+        });
+
+        // Step 3: Post-fix rules
+        const PRIORITY_CATS = new Set(['Interco', 'Alternance (OPCO)', 'CPF', 'Reconversion']);
+
+        data.forEach(row => {
+            // Interco prioritaire si "TRESO" dans libellé
+            if (row._libNorm.includes('TRESO')) {
+                row.categorie = 'Interco';
+                row.ruleHit = 'Post-fix: Interco (TRESO in Libelle)';
+            }
+        });
+
+        data.forEach(row => {
+            // B2C si CA CONSUMER FINANCE (enc only)
+            if (row.sens === 'Encaissement' && row._libNorm.includes('CA CONSUMER FINANCE')) {
+                row.categorie = 'B2C';
+                row.ruleHit = 'Post-fix: B2C (CA CONSUMER FINANCE)';
+            }
+        });
+
+        data.forEach(row => {
+            // Marketing & Acquisition si Google/AdWords (dec only)
+            if (row.sens === 'Décaissement' &&
+                (row._libNorm.includes('GOOGLE IRELAND') || row._libNorm.includes('ADWORDS') || row._libNorm.includes('GOOGLE *ADS'))) {
+                row.categorie = 'Marketing & Acquisition';
+                row.ruleHit = 'Post-fix: Marketing & Acquisition (Google/AdWords)';
+            }
+        });
+
+        data.forEach(row => {
+            // B2B enc — nouveaux marqueurs (ne pas écraser Interco/OPCO/CPF/Reconversion)
+            if (row.sens === 'Encaissement' && !PRIORITY_CATS.has(row.categorie)) {
+                const libUp = String(row._libNorm).toUpperCase();
+                if (B2B_EXTRA.some(k => libUp.includes(k.toUpperCase()))) {
+                    row.categorie = 'B2B';
+                    row.ruleHit = 'Post-fix: Enc B2B (client markers v621h)';
+                }
+            }
+        });
+
+        data.forEach(row => {
+            // SaaS/IT — ONLINEFORMAPRO
+            if (row._libNorm.includes('ONLINEFORMAPRO')) {
+                row.categorie = 'SaaS/IT';
+                row.ruleHit = 'Post-fix: SaaS/IT (ONLINEFORMAPRO)';
+            }
+        });
+
+        data.forEach(row => {
+            // Formateurs / Freelances — PID PENNYLANE
+            if (FF_REGEX_PID_PENNYLANE.test(row._libNorm)) {
+                row.categorie = 'Formateurs / Freelances';
+                row.ruleHit = 'Post-fix: FF (PID PENNYLANE)';
+            }
+        });
+    }
+
+    // ══════════════════════════════════════════════
+    //  COLUMN MAPPING
+    // ══════════════════════════════════════════════
+
     const COL_MAP = {
         date: ['date'],
         mois: ['mois'],
         compte: ['compte bancaire', 'compte', 'bank account'],
         libelle: ['libellé', 'libelle', 'label', 'description'],
         montant: ['montant', 'amount'],
-        tiers: ['tiers', 'third party', 'vendor'],
+        tiers: ['tiers', 'third party', 'vendor', 'nom du tiers'],
         justifie: ['justifié', 'justifie', 'justified'],
         commentaires: ['commentaires', 'comments'],
         etat: ['état', 'etat', 'status'],
@@ -55,7 +395,10 @@
         return mapping;
     }
 
-    // ── File Upload ──
+    // ══════════════════════════════════════════════
+    //  FILE UPLOAD
+    // ══════════════════════════════════════════════
+
     const uploadZone = $('#upload-zone');
     const fileInput = $('#file-input');
 
@@ -84,8 +427,6 @@
         $('#file-name').textContent = file.name;
         $('#file-size').textContent = formatFileSize(file.size);
         $('#file-info').classList.remove('hidden');
-
-        // Store file for later
         window._selectedFile = file;
     }
 
@@ -104,7 +445,10 @@
         screens[name].classList.add('active');
     }
 
-    // ── File Processing ──
+    // ══════════════════════════════════════════════
+    //  FILE PROCESSING
+    // ══════════════════════════════════════════════
+
     function processFile(file) {
         showScreen('loading');
         const ext = file.name.split('.').pop().toLowerCase();
@@ -115,9 +459,7 @@
                 skipEmptyLines: true,
                 encoding: 'UTF-8',
                 complete: (result) => {
-                    setTimeout(() => {
-                        parseAndAnalyze(result.data, result.meta.fields);
-                    }, 500);
+                    setTimeout(() => parseAndAnalyze(result.data, result.meta.fields), 500);
                 },
                 error: () => {
                     alert('Erreur lors de la lecture du fichier CSV.');
@@ -149,9 +491,7 @@
         rawData = data.map((row) => {
             const montantRaw = row[colMap.montant] || '0';
             const montant = parseFloat(
-                String(montantRaw)
-                    .replace(/\s/g, '')
-                    .replace(',', '.')
+                String(montantRaw).replace(/\s/g, '').replace(',', '.')
             ) || 0;
 
             const dateRaw = row[colMap.date] || '';
@@ -175,14 +515,22 @@
                 projets: row[colMap.projets] || '',
                 titulaire: row[colMap.titulaire] || '',
                 nom_carte: row[colMap.nom_carte] || '',
+                // Will be filled by categorizeAll
+                categorie: '',
+                ruleHit: '',
+                sens: '',
             };
         });
 
         // Sort by date
         rawData.sort((a, b) => a.date - b.date);
-        filteredData = [...rawData];
 
+        // Run categorization engine
+        $('#loader-status').textContent = 'Catégorisation des transactions...';
         setTimeout(() => {
+            categorizeAll(rawData);
+            filteredData = [...rawData];
+
             $('#loader-status').textContent = 'Génération du tableau de bord...';
             setTimeout(() => {
                 buildDashboard();
@@ -194,23 +542,14 @@
     function parseDate(str) {
         if (!str) return new Date(0);
         const s = String(str).trim();
-
-        // DD/MM/YYYY or D/M/YYYY
         const dmy = s.match(/^(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})$/);
         if (dmy) return new Date(+dmy[3], +dmy[2] - 1, +dmy[1]);
-
-        // YYYY-MM-DD
         const ymd = s.match(/^(\d{4})[/.-](\d{1,2})[/.-](\d{1,2})$/);
         if (ymd) return new Date(+ymd[1], +ymd[2] - 1, +ymd[3]);
-
-        // Excel numeric date
         if (/^\d+$/.test(s)) {
             const num = parseInt(s, 10);
-            if (num > 40000 && num < 60000) {
-                return new Date((num - 25569) * 86400 * 1000);
-            }
+            if (num > 40000 && num < 60000) return new Date((num - 25569) * 86400 * 1000);
         }
-
         return new Date(s);
     }
 
@@ -219,12 +558,16 @@
         return d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' });
     }
 
-    // ── Dashboard Builder ──
+    // ══════════════════════════════════════════════
+    //  DASHBOARD BUILDER
+    // ══════════════════════════════════════════════
+
     function buildDashboard() {
         renderKPIs();
         renderFlowChart();
         renderCumulativeChart();
-        renderCategoriesChart();
+        renderEncCategoriesChart();
+        renderDecCategoriesChart();
         renderTopVendorsChart();
         renderTeamsChart();
         populateFilters();
@@ -246,7 +589,6 @@
         $('#kpi-net').className = 'kpi-value ' + (net >= 0 ? 'amount-positive' : 'amount-negative');
         $('#kpi-count').textContent = rawData.length.toLocaleString('fr-FR');
 
-        // Period badge
         const dates = rawData.map((r) => r.date).filter((d) => d && !isNaN(d.getTime()));
         if (dates.length > 0) {
             const minDate = new Date(Math.min(...dates));
@@ -281,8 +623,11 @@
         orange: '#f97316',
         lime: '#84cc16',
         rose: '#f43f5e',
+        sky: '#38bdf8',
+        fuchsia: '#d946ef',
+        emerald: '#34d399',
+        yellow: '#eab308',
     };
-
     const paletteArray = Object.values(chartColors);
 
     function getChartDefaults() {
@@ -332,6 +677,43 @@
         };
     }
 
+    function getDoughnutOptions(position) {
+        return {
+            responsive: true,
+            maintainAspectRatio: false,
+            cutout: '55%',
+            plugins: {
+                legend: {
+                    position: position || 'right',
+                    labels: {
+                        color: '#a5a0b8',
+                        font: { family: 'Inter', size: 11 },
+                        padding: 10,
+                        boxWidth: 12,
+                        boxHeight: 12,
+                        borderRadius: 3,
+                    },
+                },
+                tooltip: {
+                    backgroundColor: 'rgba(26, 20, 40, 0.95)',
+                    titleColor: '#f1f0f5',
+                    bodyColor: '#a5a0b8',
+                    borderColor: 'rgba(139, 92, 246, 0.2)',
+                    borderWidth: 1,
+                    cornerRadius: 8,
+                    padding: 12,
+                    callbacks: {
+                        label: (ctx) => {
+                            const total = ctx.dataset.data.reduce((s, v) => s + v, 0);
+                            const pct = ((ctx.parsed / total) * 100).toFixed(1);
+                            return ctx.label + ': ' + formatCurrency(ctx.parsed) + ' (' + pct + '%)';
+                        },
+                    },
+                },
+            },
+        };
+    }
+
     function destroyChart(key) {
         if (charts[key]) {
             charts[key].destroy();
@@ -365,7 +747,6 @@
     function renderFlowChart() {
         const data = aggregateByMonth();
         destroyChart('flow');
-
         const ctx = $('#chart-flow').getContext('2d');
         const defaults = getChartDefaults();
 
@@ -428,16 +809,10 @@
     function renderCumulativeChart() {
         const data = aggregateByMonth();
         destroyChart('cumulative');
-
         let cumulative = 0;
-        const cumData = data.net.map((v) => {
-            cumulative += v;
-            return cumulative;
-        });
-
+        const cumData = data.net.map((v) => { cumulative += v; return cumulative; });
         const ctx = $('#chart-cumulative').getContext('2d');
         const defaults = getChartDefaults();
-
         const gradient = ctx.createLinearGradient(0, 0, 0, 300);
         gradient.addColorStop(0, 'rgba(139, 92, 246, 0.25)');
         gradient.addColorStop(1, 'rgba(139, 92, 246, 0)');
@@ -446,160 +821,95 @@
             type: 'line',
             data: {
                 labels: data.labels,
-                datasets: [
-                    {
-                        label: 'Solde cumulé',
-                        data: cumData,
-                        borderColor: '#8b5cf6',
-                        backgroundColor: gradient,
-                        borderWidth: 2.5,
-                        fill: true,
-                        tension: 0.4,
-                        pointRadius: 4,
-                        pointBackgroundColor: '#8b5cf6',
-                        pointBorderColor: '#1a1428',
-                        pointBorderWidth: 2,
-                    },
-                ],
+                datasets: [{
+                    label: 'Solde cumulé',
+                    data: cumData,
+                    borderColor: '#8b5cf6',
+                    backgroundColor: gradient,
+                    borderWidth: 2.5,
+                    fill: true,
+                    tension: 0.4,
+                    pointRadius: 4,
+                    pointBackgroundColor: '#8b5cf6',
+                    pointBorderColor: '#1a1428',
+                    pointBorderWidth: 2,
+                }],
             },
             options: defaults,
         });
     }
 
-    // ── Categories (Expenses by Tiers/Libellé) ──
-    function categorizeExpenses() {
-        const categories = {};
-        rawData
-            .filter((r) => r.montant < 0)
-            .forEach((r) => {
-                const cat = extractCategory(r);
-                if (!categories[cat]) categories[cat] = 0;
-                categories[cat] += Math.abs(r.montant);
-            });
-
-        const sorted = Object.entries(categories).sort((a, b) => b[1] - a[1]);
-        const top = sorted.slice(0, 10);
-        const otherTotal = sorted.slice(10).reduce((s, [, v]) => s + v, 0);
-        if (otherTotal > 0) top.push(['Autres', otherTotal]);
-
+    // ── Encaissements by category (doughnut) ──
+    function aggregateByCategorie(sens) {
+        const cats = {};
+        rawData.filter(r => r.sens === sens).forEach(r => {
+            const cat = r.categorie || 'Non catégorisé';
+            if (!cats[cat]) cats[cat] = 0;
+            cats[cat] += Math.abs(r.montant);
+        });
+        const sorted = Object.entries(cats).sort((a, b) => b[1] - a[1]);
         return {
-            labels: top.map(([k]) => k),
-            values: top.map(([, v]) => v),
+            labels: sorted.map(([k]) => k),
+            values: sorted.map(([, v]) => v),
         };
     }
 
-    function extractCategory(row) {
-        // Use nom_carte or tiers if available, otherwise parse libellé
-        if (row.nom_carte && row.nom_carte.trim()) return row.nom_carte.trim();
-        if (row.tiers && row.tiers.trim()) return row.tiers.trim();
+    function renderEncCategoriesChart() {
+        const data = aggregateByCategorie('Encaissement');
+        destroyChart('encCategories');
+        const ctx = $('#chart-enc-categories').getContext('2d');
 
-        const lib = row.libelle.toUpperCase();
-
-        // Known patterns
-        if (lib.includes('GOOGLE')) return 'Google';
-        if (lib.includes('AMAZON')) return 'Amazon';
-        if (lib.includes('MICROSOFT')) return 'Microsoft';
-        if (lib.includes('OPENAI') || lib.includes('CHATGPT')) return 'OpenAI / ChatGPT';
-        if (lib.includes('LINKEDIN')) return 'LinkedIn';
-        if (lib.includes('SWAN')) return 'SWAN (frais bancaires)';
-        if (lib.includes('ADOBE')) return 'Adobe';
-        if (lib.includes('SEMRUSH')) return 'Semrush';
-        if (lib.includes('SNOWFLAKE')) return 'Snowflake';
-        if (lib.includes('ABEILLE VIE')) return 'Abeille Vie (assurance)';
-        if (lib.includes('FRANCE TRAVAIL')) return 'France Travail';
-        if (lib.includes('STRIPE')) return 'Stripe';
-        if (lib.includes('STAPE')) return 'Stape';
-        if (lib.includes('MAKE.COM') || lib.includes('MAKE')) return 'Make';
-        if (lib.includes('PERPLEXITY')) return 'Perplexity';
-        if (lib.includes('INDEED')) return 'Indeed';
-        if (lib.includes('LA POSTE')) return 'La Poste';
-        if (lib.includes('MISTER GARDEN')) return 'Mister Garden';
-        if (lib.includes('GILMORE') || lib.includes('GILMORE')) return 'Gilmore';
-        if (lib.includes('WIFIRST')) return 'WiFirst';
-        if (lib.includes('IONOS')) return 'IONOS';
-
-        // SEPA transfers
-        if (lib.includes('VIR SEPA') || lib.includes('PRLV SEPA')) {
-            const match = lib.match(/(?:FRM|FRPM|DE)\s+([A-Z][A-Z\s]+?)(?:\s+\/|\s+IEID|$)/);
-            if (match) return match[1].trim();
-        }
-
-        // Fallback: first meaningful part
-        const words = row.libelle.trim().split(/\s+/).slice(0, 3).join(' ');
-        return words || 'Non catégorisé';
-    }
-
-    function renderCategoriesChart() {
-        const data = categorizeExpenses();
-        destroyChart('categories');
-
-        const ctx = $('#chart-categories').getContext('2d');
-
-        charts.categories = new Chart(ctx, {
+        charts.encCategories = new Chart(ctx, {
             type: 'doughnut',
             data: {
                 labels: data.labels,
-                datasets: [
-                    {
-                        data: data.values,
-                        backgroundColor: paletteArray.slice(0, data.labels.length),
-                        borderColor: '#1a1428',
-                        borderWidth: 2,
-                        hoverOffset: 6,
-                    },
-                ],
+                datasets: [{
+                    data: data.values,
+                    backgroundColor: paletteArray.slice(0, data.labels.length),
+                    borderColor: '#1a1428',
+                    borderWidth: 2,
+                    hoverOffset: 6,
+                }],
             },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                cutout: '55%',
-                plugins: {
-                    legend: {
-                        position: 'right',
-                        labels: {
-                            color: '#a5a0b8',
-                            font: { family: 'Inter', size: 11 },
-                            padding: 10,
-                            boxWidth: 12,
-                            boxHeight: 12,
-                            borderRadius: 3,
-                        },
-                    },
-                    tooltip: {
-                        backgroundColor: 'rgba(26, 20, 40, 0.95)',
-                        titleColor: '#f1f0f5',
-                        bodyColor: '#a5a0b8',
-                        borderColor: 'rgba(139, 92, 246, 0.2)',
-                        borderWidth: 1,
-                        cornerRadius: 8,
-                        padding: 12,
-                        callbacks: {
-                            label: (ctx) => {
-                                const total = ctx.dataset.data.reduce((s, v) => s + v, 0);
-                                const pct = ((ctx.parsed / total) * 100).toFixed(1);
-                                return ctx.label + ': ' + formatCurrency(ctx.parsed) + ' (' + pct + '%)';
-                            },
-                        },
-                    },
-                },
-            },
+            options: getDoughnutOptions('right'),
         });
     }
 
-    // ── Top Vendors ──
+    function renderDecCategoriesChart() {
+        const data = aggregateByCategorie('Décaissement');
+        destroyChart('decCategories');
+        const ctx = $('#chart-dec-categories').getContext('2d');
+
+        charts.decCategories = new Chart(ctx, {
+            type: 'doughnut',
+            data: {
+                labels: data.labels,
+                datasets: [{
+                    data: data.values,
+                    backgroundColor: paletteArray.slice(0, data.labels.length),
+                    borderColor: '#1a1428',
+                    borderWidth: 2,
+                    hoverOffset: 6,
+                }],
+            },
+            options: getDoughnutOptions('right'),
+        });
+    }
+
+    // ── Top Vendors (by category now) ──
     function renderTopVendorsChart() {
-        const vendors = {};
-        rawData.forEach((r) => {
-            const name = extractCategory(r);
-            if (!vendors[name]) vendors[name] = { in: 0, out: 0 };
-            if (r.montant > 0) vendors[name].in += r.montant;
-            else vendors[name].out += Math.abs(r.montant);
+        const cats = {};
+        rawData.forEach(r => {
+            const cat = r.categorie || 'Non catégorisé';
+            if (!cats[cat]) cats[cat] = { in: 0, out: 0 };
+            if (r.montant > 0) cats[cat].in += r.montant;
+            else cats[cat].out += Math.abs(r.montant);
         });
 
-        const sorted = Object.entries(vendors)
+        const sorted = Object.entries(cats)
             .map(([name, v]) => ({ name, total: v.in + v.out, in: v.in, out: v.out }))
             .sort((a, b) => b.total - a.total)
-            .slice(0, 10);
+            .slice(0, 12);
 
         destroyChart('topVendors');
         const ctx = $('#chart-top-vendors').getContext('2d');
@@ -631,17 +941,11 @@
                     ...defaults.scales,
                     x: {
                         ...defaults.scales.x,
-                        ticks: {
-                            ...defaults.scales.x.ticks,
-                            callback: (v) => formatCurrency(v),
-                        },
+                        ticks: { ...defaults.scales.x.ticks, callback: (v) => formatCurrency(v) },
                     },
                     y: {
                         ...defaults.scales.y,
-                        ticks: {
-                            color: '#a5a0b8',
-                            font: { family: 'Inter', size: 11 },
-                        },
+                        ticks: { color: '#a5a0b8', font: { family: 'Inter', size: 11 } },
                         grid: { display: false },
                     },
                 },
@@ -660,70 +964,31 @@
 
         const sorted = Object.entries(teams).sort((a, b) => b[1] - a[1]);
         destroyChart('teams');
-
         const ctx = $('#chart-teams').getContext('2d');
 
         charts.teams = new Chart(ctx, {
             type: 'doughnut',
             data: {
                 labels: sorted.map(([k]) => k),
-                datasets: [
-                    {
-                        data: sorted.map(([, v]) => v),
-                        backgroundColor: [
-                            chartColors.purple,
-                            chartColors.blue,
-                            chartColors.green,
-                            chartColors.amber,
-                            chartColors.pink,
-                            chartColors.cyan,
-                            chartColors.indigo,
-                            chartColors.teal,
-                        ],
-                        borderColor: '#1a1428',
-                        borderWidth: 2,
-                    },
-                ],
+                datasets: [{
+                    data: sorted.map(([, v]) => v),
+                    backgroundColor: paletteArray.slice(0, sorted.length),
+                    borderColor: '#1a1428',
+                    borderWidth: 2,
+                }],
             },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                cutout: '55%',
-                plugins: {
-                    legend: {
-                        position: 'right',
-                        labels: {
-                            color: '#a5a0b8',
-                            font: { family: 'Inter', size: 11 },
-                            padding: 10,
-                            boxWidth: 12,
-                            boxHeight: 12,
-                        },
-                    },
-                    tooltip: {
-                        backgroundColor: 'rgba(26, 20, 40, 0.95)',
-                        titleColor: '#f1f0f5',
-                        bodyColor: '#a5a0b8',
-                        borderColor: 'rgba(139, 92, 246, 0.2)',
-                        borderWidth: 1,
-                        cornerRadius: 8,
-                        callbacks: {
-                            label: (ctx) => {
-                                const total = ctx.dataset.data.reduce((s, v) => s + v, 0);
-                                const pct = ((ctx.parsed / total) * 100).toFixed(1);
-                                return ctx.label + ': ' + formatCurrency(ctx.parsed) + ' (' + pct + '%)';
-                            },
-                        },
-                    },
-                },
-            },
+            options: getDoughnutOptions('right'),
         });
     }
 
-    // ── Table ──
+    // ══════════════════════════════════════════════
+    //  TABLE
+    // ══════════════════════════════════════════════
+
     function populateFilters() {
         const types = new Set(rawData.map((r) => r.type).filter(Boolean));
         const teams = new Set(rawData.map((r) => r.equipe).filter(Boolean));
+        const categories = new Set(rawData.map((r) => r.categorie).filter(Boolean));
 
         const typeSelect = $('#filter-type');
         typeSelect.innerHTML = '<option value="">Tous les types</option>';
@@ -737,8 +1002,15 @@
             teamSelect.innerHTML += `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`;
         });
 
+        const catSelect = $('#filter-categorie');
+        catSelect.innerHTML = '<option value="">Toutes les catégories</option>';
+        [...categories].sort().forEach((c) => {
+            catSelect.innerHTML += `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`;
+        });
+
         typeSelect.addEventListener('change', applyFilters);
         teamSelect.addEventListener('change', applyFilters);
+        catSelect.addEventListener('change', applyFilters);
         $('#search-input').addEventListener('input', debounce(applyFilters, 300));
     }
 
@@ -746,14 +1018,15 @@
         const search = $('#search-input').value.toLowerCase();
         const typeFilter = $('#filter-type').value;
         const teamFilter = $('#filter-team').value;
+        const catFilter = $('#filter-categorie').value;
 
         filteredData = rawData.filter((r) => {
             if (typeFilter && r.type !== typeFilter) return false;
             if (teamFilter && r.equipe !== teamFilter) return false;
+            if (catFilter && r.categorie !== catFilter) return false;
             if (search) {
-                const searchable = [r.libelle, r.tiers, r.nom_carte, r.titulaire, r.equipe, r.type]
-                    .join(' ')
-                    .toLowerCase();
+                const searchable = [r.libelle, r.tiers, r.nom_carte, r.titulaire, r.equipe, r.type, r.categorie]
+                    .join(' ').toLowerCase();
                 if (!searchable.includes(search)) return false;
             }
             return true;
@@ -773,14 +1046,14 @@
                 (r) => `
             <tr>
                 <td>${escapeHtml(r.dateStr)}</td>
-                <td title="${escapeHtml(r.libelle)}">${escapeHtml(truncate(r.libelle, 50))}</td>
+                <td title="${escapeHtml(r.libelle)}">${escapeHtml(truncate(r.libelle, 45))}</td>
                 <td>${escapeHtml(r.tiers || '—')}</td>
                 <td class="text-right ${r.montant >= 0 ? 'amount-positive' : 'amount-negative'}">
                     ${formatCurrency(r.montant)}
                 </td>
-                <td>${r.type ? `<span class="tag ${getTagClass(r.type)}">${escapeHtml(r.type)}</span>` : '—'}</td>
+                <td><span class="tag ${getCatTagClass(r.categorie)}" title="${escapeHtml(r.ruleHit)}">${escapeHtml(r.categorie || '—')}</span></td>
+                <td><span class="tag tag-sens-${r.montant >= 0 ? 'enc' : 'dec'}">${r.montant >= 0 ? 'Enc' : 'Déc'}</span></td>
                 <td>${escapeHtml(r.equipe || '—')}</td>
-                <td>${escapeHtml(r.pl_liora || r.pl_omnes || '—')}</td>
                 <td>${escapeHtml(r.titulaire || '—')}</td>
             </tr>`
             )
@@ -792,28 +1065,18 @@
     function renderPagination() {
         const totalPages = Math.ceil(filteredData.length / PAGE_SIZE);
         const container = $('#pagination');
-        if (totalPages <= 1) {
-            container.innerHTML = '';
-            return;
-        }
+        if (totalPages <= 1) { container.innerHTML = ''; return; }
 
         let html = '';
         const maxVisible = 7;
         let startPage = Math.max(1, currentPage - Math.floor(maxVisible / 2));
         let endPage = Math.min(totalPages, startPage + maxVisible - 1);
-        if (endPage - startPage < maxVisible - 1) {
-            startPage = Math.max(1, endPage - maxVisible + 1);
-        }
+        if (endPage - startPage < maxVisible - 1) startPage = Math.max(1, endPage - maxVisible + 1);
 
-        if (currentPage > 1) {
-            html += `<button class="page-btn" data-page="${currentPage - 1}">&laquo;</button>`;
-        }
-        for (let i = startPage; i <= endPage; i++) {
+        if (currentPage > 1) html += `<button class="page-btn" data-page="${currentPage - 1}">&laquo;</button>`;
+        for (let i = startPage; i <= endPage; i++)
             html += `<button class="page-btn ${i === currentPage ? 'active' : ''}" data-page="${i}">${i}</button>`;
-        }
-        if (currentPage < totalPages) {
-            html += `<button class="page-btn" data-page="${currentPage + 1}">&raquo;</button>`;
-        }
+        if (currentPage < totalPages) html += `<button class="page-btn" data-page="${currentPage + 1}">&raquo;</button>`;
 
         container.innerHTML = html;
         container.querySelectorAll('.page-btn').forEach((btn) => {
@@ -825,58 +1088,59 @@
         });
     }
 
-    function getTagClass(type) {
-        const t = type.toLowerCase();
-        if (t.includes('finance') || t.includes('frais')) return 'tag-finance';
-        if (t.includes('support')) return 'tag-support';
-        return 'tag-default';
+    // Category tag color mapping
+    const CAT_COLOR_MAP = {
+        'B2B': 'tag-b2b', 'B2C': 'tag-b2c', 'Interco': 'tag-interco',
+        'Alternance (OPCO)': 'tag-opco', 'CPF': 'tag-cpf', 'Reconversion': 'tag-reconv',
+        'Salaires': 'tag-salaires', 'URSSAF': 'tag-urssaf',
+        'SaaS/IT': 'tag-saas', 'Marketing & Acquisition': 'tag-mkt',
+        'Formateurs / Freelances': 'tag-ff',
+        'Frais généraux & services': 'tag-fgs', 'Note de frais': 'tag-ndf',
+        'Banques/Dettes': 'tag-banques', 'Autres revenus': 'tag-autres-rev',
+        'DIVERS': 'tag-divers',
+    };
+
+    function getCatTagClass(cat) {
+        return CAT_COLOR_MAP[cat] || 'tag-default';
     }
 
-    // ── Summary ──
+    // ══════════════════════════════════════════════
+    //  SUMMARY
+    // ══════════════════════════════════════════════
+
     function renderSummary() {
-        // Top expenses
+        // Top expense categories
         const expensesByCat = {};
         rawData.filter((r) => r.montant < 0).forEach((r) => {
-            const cat = extractCategory(r);
-            if (!expensesByCat[cat]) expensesByCat[cat] = 0;
-            expensesByCat[cat] += Math.abs(r.montant);
+            const cat = r.categorie || 'Non catégorisé';
+            expensesByCat[cat] = (expensesByCat[cat] || 0) + Math.abs(r.montant);
         });
-        const topExpenses = Object.entries(expensesByCat)
-            .sort((a, b) => b[1] - a[1])
-            .slice(0, 8);
+        const topExpenses = Object.entries(expensesByCat).sort((a, b) => b[1] - a[1]).slice(0, 8);
 
         $('#summary-expenses').innerHTML = topExpenses
-            .map(
-                ([name, val]) =>
-                    `<div class="summary-item">
-                        <span class="summary-item-label">${escapeHtml(name)}</span>
-                        <span class="summary-item-value amount-negative">${formatCurrency(-val)}</span>
-                    </div>`
-            )
-            .join('');
+            .map(([name, val]) =>
+                `<div class="summary-item">
+                    <span class="summary-item-label">${escapeHtml(name)}</span>
+                    <span class="summary-item-value amount-negative">${formatCurrency(-val)}</span>
+                </div>`
+            ).join('');
 
-        // Top income
+        // Top income categories
         const incomeByCat = {};
         rawData.filter((r) => r.montant > 0).forEach((r) => {
-            const cat = extractCategory(r);
-            if (!incomeByCat[cat]) incomeByCat[cat] = 0;
-            incomeByCat[cat] += r.montant;
+            const cat = r.categorie || 'Non catégorisé';
+            incomeByCat[cat] = (incomeByCat[cat] || 0) + r.montant;
         });
-        const topIncome = Object.entries(incomeByCat)
-            .sort((a, b) => b[1] - a[1])
-            .slice(0, 8);
+        const topIncome = Object.entries(incomeByCat).sort((a, b) => b[1] - a[1]).slice(0, 8);
 
         $('#summary-income').innerHTML = topIncome
-            .map(
-                ([name, val]) =>
-                    `<div class="summary-item">
-                        <span class="summary-item-label">${escapeHtml(name)}</span>
-                        <span class="summary-item-value amount-positive">${formatCurrency(val)}</span>
-                    </div>`
-            )
-            .join('');
+            .map(([name, val]) =>
+                `<div class="summary-item">
+                    <span class="summary-item-label">${escapeHtml(name)}</span>
+                    <span class="summary-item-value amount-positive">${formatCurrency(val)}</span>
+                </div>`
+            ).join('');
 
-        // Alerts
         renderAlerts();
     }
 
@@ -886,66 +1150,58 @@
         const totalOut = Math.abs(rawData.filter((r) => r.montant < 0).reduce((s, r) => s + r.montant, 0));
         const net = totalIn - totalOut;
 
-        // Net position
         if (net < 0) {
-            alerts.push({
-                type: 'warning',
-                text: `Le solde net est négatif (${formatCurrency(-Math.abs(net))}). Les décaissements dépassent les encaissements sur la période.`,
-            });
+            alerts.push({ type: 'warning', text: `Solde net négatif (${formatCurrency(-Math.abs(net))}). Les décaissements dépassent les encaissements.` });
         } else {
-            alerts.push({
-                type: 'success',
-                text: `Le solde net est positif (${formatCurrency(net)}). Les encaissements couvrent les décaissements.`,
-            });
+            alerts.push({ type: 'success', text: `Solde net positif (${formatCurrency(net)}). Les encaissements couvrent les décaissements.` });
         }
 
-        // Large transactions
+        // Largest transaction
         const sorted = [...rawData].sort((a, b) => Math.abs(b.montant) - Math.abs(a.montant));
-        const largest = sorted[0];
-        if (largest) {
-            alerts.push({
-                type: 'info',
-                text: `Transaction la plus importante : ${formatCurrency(largest.montant)} — ${largest.libelle.substring(0, 60)}`,
-            });
+        if (sorted[0]) {
+            alerts.push({ type: 'info', text: `Transaction max : ${formatCurrency(sorted[0].montant)} — ${sorted[0].libelle.substring(0, 60)}` });
         }
 
-        // Unjustified transactions
+        // Unjustified
         const unjustified = rawData.filter((r) => r.justifie && r.justifie.toLowerCase() === 'non');
         if (unjustified.length > 0) {
-            const totalUnjustified = unjustified.reduce((s, r) => s + Math.abs(r.montant), 0);
-            alerts.push({
-                type: 'warning',
-                text: `${unjustified.length} transaction(s) non justifiée(s) pour un total de ${formatCurrency(totalUnjustified)}.`,
-            });
+            const tot = unjustified.reduce((s, r) => s + Math.abs(r.montant), 0);
+            alerts.push({ type: 'warning', text: `${unjustified.length} transaction(s) non justifiée(s) pour ${formatCurrency(tot)}.` });
         }
 
-        // Concentration risk
-        const topExpense = Object.entries(
-            rawData.filter((r) => r.montant < 0).reduce((acc, r) => {
-                const cat = extractCategory(r);
+        // Concentration risk (by category)
+        const topExpCat = Object.entries(
+            rawData.filter(r => r.montant < 0).reduce((acc, r) => {
+                const cat = r.categorie || 'DIVERS';
                 acc[cat] = (acc[cat] || 0) + Math.abs(r.montant);
                 return acc;
             }, {})
         ).sort((a, b) => b[1] - a[1])[0];
 
-        if (topExpense && totalOut > 0) {
-            const pct = ((topExpense[1] / totalOut) * 100).toFixed(1);
+        if (topExpCat && totalOut > 0) {
+            const pct = ((topExpCat[1] / totalOut) * 100).toFixed(1);
             if (pct > 30) {
-                alerts.push({
-                    type: 'warning',
-                    text: `Concentration : "${topExpense[0]}" représente ${pct}% des dépenses totales.`,
-                });
+                alerts.push({ type: 'warning', text: `Concentration : « ${topExpCat[0]} » = ${pct}% des décaissements.` });
             }
         }
 
-        // Recurring SEPA debits
-        const sepaDebits = rawData.filter((r) => r.libelle.toUpperCase().includes('PRLV SEPA'));
-        if (sepaDebits.length > 0) {
-            const total = sepaDebits.reduce((s, r) => s + Math.abs(r.montant), 0);
-            alerts.push({
-                type: 'info',
-                text: `${sepaDebits.length} prélèvement(s) SEPA détecté(s) pour un total de ${formatCurrency(total)}.`,
-            });
+        // Interco volume
+        const intercoTotal = rawData.filter(r => r.categorie === 'Interco').reduce((s, r) => s + Math.abs(r.montant), 0);
+        if (intercoTotal > 0) {
+            alerts.push({ type: 'info', text: `Flux Interco détectés pour un volume de ${formatCurrency(intercoTotal)}.` });
+        }
+
+        // SEPA debits
+        const sepa = rawData.filter(r => normUpper(r.libelle).includes('PRLV SEPA'));
+        if (sepa.length > 0) {
+            const tot = sepa.reduce((s, r) => s + Math.abs(r.montant), 0);
+            alerts.push({ type: 'info', text: `${sepa.length} prélèvement(s) SEPA pour ${formatCurrency(tot)}.` });
+        }
+
+        // Fallback / DIVERS count
+        const diversCount = rawData.filter(r => r.categorie === 'DIVERS' || r.ruleHit.includes('Fallback')).length;
+        if (diversCount > 0) {
+            alerts.push({ type: 'warning', text: `${diversCount} transaction(s) classée(s) « DIVERS / Fallback » — à vérifier manuellement.` });
         }
 
         const iconMap = {
@@ -955,14 +1211,14 @@
         };
 
         $('#summary-alerts').innerHTML = alerts
-            .map(
-                (a) =>
-                    `<div class="alert-item">${iconMap[a.type]}<span>${escapeHtml(a.text)}</span></div>`
-            )
+            .map((a) => `<div class="alert-item">${iconMap[a.type]}<span>${escapeHtml(a.text)}</span></div>`)
             .join('');
     }
 
-    // ── Utilities ──
+    // ══════════════════════════════════════════════
+    //  UTILITIES
+    // ══════════════════════════════════════════════
+
     function escapeHtml(str) {
         if (!str) return '';
         const div = document.createElement('div');
@@ -977,32 +1233,25 @@
 
     function debounce(fn, ms) {
         let timer;
-        return (...args) => {
-            clearTimeout(timer);
-            timer = setTimeout(() => fn(...args), ms);
-        };
+        return (...args) => { clearTimeout(timer); timer = setTimeout(() => fn(...args), ms); };
     }
 
     // ── New File Button ──
     $('#btn-new-file').addEventListener('click', () => {
-        // Reset state
         rawData = [];
         filteredData = [];
         currentPage = 1;
         Object.keys(charts).forEach(destroyChart);
-
         fileInput.value = '';
         $('#file-info').classList.add('hidden');
         window._selectedFile = null;
         showScreen('upload');
     });
 
-    // ── Export (simple print) ──
-    $('#btn-export').addEventListener('click', () => {
-        window.print();
-    });
+    // ── Export ──
+    $('#btn-export').addEventListener('click', () => { window.print(); });
 
-    // ── Mouse glow effect ──
+    // ── Mouse glow ──
     document.addEventListener('mousemove', (e) => {
         document.documentElement.style.setProperty('--mouse-x', e.clientX + 'px');
         document.documentElement.style.setProperty('--mouse-y', e.clientY + 'px');

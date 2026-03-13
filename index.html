@@ -18,19 +18,18 @@
         <nav class="navbar">
             <div class="nav-brand">
                 <div class="logo-icon">
-                    <svg viewBox="0 0 270 72" fill="none" xmlns="http://www.w3.org/2000/svg" class="liora-logo">
-                        <!-- L -->
-                        <path d="M0 0 h12 v56 h24 v12 H0 Z" fill="#F47458"/>
-                        <!-- i dot (small rounded square) -->
-                        <rect x="44" y="0" width="12" height="12" rx="2.5" fill="#F47458"/>
-                        <!-- i stem -->
-                        <rect x="44" y="24" width="12" height="44" fill="#F47458"/>
-                        <!-- o (rounded square, outline only) -->
-                        <rect x="42" y="22" width="44" height="46" rx="10" stroke="#F47458" stroke-width="12" fill="none"/>
-                        <!-- r -->
-                        <path d="M100 24 h12 v10 c4-8 10-12 18-12 h2 v12 h-2 c-10 0-16 5-18 14 v20 h-12 Z" fill="#F47458"/>
-                        <!-- a (open circle) -->
-                        <ellipse cx="162" cy="44" rx="22" ry="22" stroke="#F47458" stroke-width="12" fill="none"/>
+                    <svg viewBox="0 0 500 196" fill="none" xmlns="http://www.w3.org/2000/svg" class="liora-logo">
+                        <!-- L: vertical bar + horizontal foot -->
+                        <path d="M0,0 h30 v160 h56 v30 H0 Z" fill="#F47458"/>
+                        <!-- i dot: small rounded square above the io shape -->
+                        <rect x="110" y="0" width="30" height="30" rx="6" fill="#F47458"/>
+                        <!-- io: rounded rectangle frame (left side = i stem, whole shape = o) -->
+                        <rect x="104" y="54" width="118" height="136" rx="22" stroke="#F47458" stroke-width="30" fill="none"/>
+                        <!-- r: stem + arm curving right -->
+                        <path d="M254,54 h30 v136 h-30 v-136 Z" fill="#F47458"/>
+                        <path d="M269,54 v0 c0,0 0,-2 14,-2 c18,0 30,10 30,30 v2 h-30 v-2 c0,-6 -4,-10 -10,-10 h-4 Z" fill="#F47458"/>
+                        <!-- a: open circle ring -->
+                        <circle cx="396" cy="122" r="60" stroke="#F47458" stroke-width="30" fill="none"/>
                     </svg>
                 </div>
                 <span class="brand-name"><span class="brand-sub">Cash Flow</span></span>
@@ -96,19 +95,18 @@
         <nav class="navbar navbar-dash">
             <div class="nav-brand">
                 <div class="logo-icon">
-                    <svg viewBox="0 0 270 72" fill="none" xmlns="http://www.w3.org/2000/svg" class="liora-logo">
-                        <!-- L -->
-                        <path d="M0 0 h12 v56 h24 v12 H0 Z" fill="#F47458"/>
-                        <!-- i dot (small rounded square) -->
-                        <rect x="44" y="0" width="12" height="12" rx="2.5" fill="#F47458"/>
-                        <!-- i stem -->
-                        <rect x="44" y="24" width="12" height="44" fill="#F47458"/>
-                        <!-- o (rounded square, outline only) -->
-                        <rect x="42" y="22" width="44" height="46" rx="10" stroke="#F47458" stroke-width="12" fill="none"/>
-                        <!-- r -->
-                        <path d="M100 24 h12 v10 c4-8 10-12 18-12 h2 v12 h-2 c-10 0-16 5-18 14 v20 h-12 Z" fill="#F47458"/>
-                        <!-- a (open circle) -->
-                        <ellipse cx="162" cy="44" rx="22" ry="22" stroke="#F47458" stroke-width="12" fill="none"/>
+                    <svg viewBox="0 0 500 196" fill="none" xmlns="http://www.w3.org/2000/svg" class="liora-logo">
+                        <!-- L: vertical bar + horizontal foot -->
+                        <path d="M0,0 h30 v160 h56 v30 H0 Z" fill="#F47458"/>
+                        <!-- i dot: small rounded square above the io shape -->
+                        <rect x="110" y="0" width="30" height="30" rx="6" fill="#F47458"/>
+                        <!-- io: rounded rectangle frame (left side = i stem, whole shape = o) -->
+                        <rect x="104" y="54" width="118" height="136" rx="22" stroke="#F47458" stroke-width="30" fill="none"/>
+                        <!-- r: stem + arm curving right -->
+                        <path d="M254,54 h30 v136 h-30 v-136 Z" fill="#F47458"/>
+                        <path d="M269,54 v0 c0,0 0,-2 14,-2 c18,0 30,10 30,30 v2 h-30 v-2 c0,-6 -4,-10 -10,-10 h-4 Z" fill="#F47458"/>
+                        <!-- a: open circle ring -->
+                        <circle cx="396" cy="122" r="60" stroke="#F47458" stroke-width="30" fill="none"/>
                     </svg>
                 </div>
                 <span class="brand-name"><span class="brand-sub">Cash Flow</span></span>
@@ -183,9 +181,9 @@
                 </div>
             </div>
 
-            <!-- Charts Row 2 -->
-            <div class="charts-grid charts-2col">
-                <div class="chart-card">
+            <!-- Charts Row 2: Cumulative -->
+            <div class="charts-grid">
+                <div class="chart-card chart-wide">
                     <div class="chart-header">
                         <h3>Solde cumulé</h3>
                     </div>
@@ -193,23 +191,35 @@
                         <canvas id="chart-cumulative"></canvas>
                     </div>
                 </div>
+            </div>
+
+            <!-- Charts Row 3: Categories by Enc / Dec -->
+            <div class="charts-grid charts-2col">
                 <div class="chart-card">
                     <div class="chart-header">
-                        <h3>Répartition des dépenses par catégorie</h3>
+                        <h3>Encaissements par catégorie</h3>
                     </div>
                     <div class="chart-container">
-                        <canvas id="chart-categories"></canvas>
+                        <canvas id="chart-enc-categories"></canvas>
+                    </div>
+                </div>
+                <div class="chart-card">
+                    <div class="chart-header">
+                        <h3>Décaissements par catégorie</h3>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="chart-dec-categories"></canvas>
                     </div>
                 </div>
             </div>
 
-            <!-- Charts Row 3 -->
+            <!-- Charts Row 4: Top categories + Teams -->
             <div class="charts-grid charts-2col">
                 <div class="chart-card">
                     <div class="chart-header">
-                        <h3>Top fournisseurs / bénéficiaires</h3>
+                        <h3>Volume par catégorie (Enc vs Déc)</h3>
                     </div>
-                    <div class="chart-container">
+                    <div class="chart-container" style="height: 400px;">
                         <canvas id="chart-top-vendors"></canvas>
                     </div>
                 </div>
@@ -231,6 +241,9 @@
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
                         <input type="text" id="search-input" placeholder="Rechercher...">
                     </div>
+                    <select id="filter-categorie" class="select-filter">
+                        <option value="">Toutes les catégories</option>
+                    </select>
                     <select id="filter-type" class="select-filter">
                         <option value="">Tous les types</option>
                     </select>
@@ -247,9 +260,9 @@
                             <th>Libellé</th>
                             <th>Tiers</th>
                             <th class="text-right">Montant</th>
-                            <th>Type</th>
+                            <th>Catégorie</th>
+                            <th>Sens</th>
                             <th>Équipe</th>
-                            <th>P&L</th>
                             <th>Titulaire</th>
                         </tr>
                     </thead>

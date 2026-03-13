@@ -711,20 +711,28 @@ body::before {
     font-weight: 500;
 }
 
-.tag-finance {
-    background: rgba(59, 130, 246, 0.12);
-    color: var(--blue-400);
-}
+/* Category tags */
+.tag-b2b { background: rgba(59, 130, 246, 0.15); color: #60a5fa; }
+.tag-b2c { background: rgba(16, 185, 129, 0.15); color: #34d399; }
+.tag-interco { background: rgba(139, 92, 246, 0.15); color: #a78bfa; }
+.tag-opco { background: rgba(6, 182, 212, 0.15); color: #22d3ee; }
+.tag-cpf { background: rgba(14, 165, 233, 0.15); color: #38bdf8; }
+.tag-reconv { background: rgba(168, 85, 247, 0.15); color: #c084fc; }
+.tag-salaires { background: rgba(249, 115, 22, 0.15); color: #fb923c; }
+.tag-urssaf { background: rgba(239, 68, 68, 0.15); color: #f87171; }
+.tag-saas { background: rgba(99, 102, 241, 0.15); color: #818cf8; }
+.tag-mkt { background: rgba(236, 72, 153, 0.15); color: #f472b6; }
+.tag-ff { background: rgba(245, 158, 11, 0.15); color: #fbbf24; }
+.tag-fgs { background: rgba(107, 114, 128, 0.15); color: #9ca3af; }
+.tag-ndf { background: rgba(234, 179, 8, 0.15); color: #facc15; }
+.tag-banques { background: rgba(244, 63, 94, 0.15); color: #fb7185; }
+.tag-autres-rev { background: rgba(20, 184, 166, 0.15); color: #2dd4bf; }
+.tag-divers { background: rgba(156, 163, 175, 0.12); color: #9ca3af; }
+.tag-default { background: rgba(139, 92, 246, 0.1); color: var(--purple-300); }
 
-.tag-support {
-    background: rgba(245, 158, 11, 0.12);
-    color: var(--amber);
-}
-
-.tag-default {
-    background: rgba(139, 92, 246, 0.1);
-    color: var(--purple-300);
-}
+/* Sens tags */
+.tag-sens-enc { background: rgba(16, 185, 129, 0.15); color: #34d399; font-size: 0.65rem; }
+.tag-sens-dec { background: rgba(239, 68, 68, 0.15); color: #f87171; font-size: 0.65rem; }
 
 .table-pagination {
     display: flex;
