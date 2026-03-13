@@ -142,6 +142,11 @@ body::before {
     height: 32px;
 }
 
+.logo-icon .liora-logo {
+    width: 110px;
+    height: 30px;
+}
+
 .brand-name {
     font-size: 1.25rem;
     font-weight: 700;
