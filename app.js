@@ -1058,42 +1058,117 @@
         });
     }
 
-    // ── Enc categories — click filters by category ──
+    // ── Enc categories — Treemap — click filters by category ──
     function renderEncCategoriesChart() {
         const data = aggregateByCategorie('Encaissement');
         destroyChart('encCategories');
         if (data.labels.length === 0) { $('#chart-enc-categories').getContext('2d').clearRect(0, 0, 9999, 9999); return; }
         const ctx = $('#chart-enc-categories').getContext('2d');
+        const treeData = data.labels.map((l, i) => ({ label: l, value: data.values[i], color: paletteArray[i % paletteArray.length] }));
+        const total = data.values.reduce((s, v) => s + v, 0);
 
         charts.encCategories = new Chart(ctx, {
-            type: 'doughnut',
-            data: { labels: data.labels, datasets: [{ data: data.values, backgroundColor: paletteArray.slice(0, data.labels.length), borderColor: '#1a1428', borderWidth: 2, hoverOffset: 6 }] },
+            type: 'treemap',
+            data: {
+                datasets: [{
+                    tree: treeData,
+                    key: 'value',
+                    groups: ['label'],
+                    backgroundColor: (ctx) => { const d = ctx.raw; return d && d._data ? d._data.color : '#8b5cf6'; },
+                    borderColor: '#1a1428',
+                    borderWidth: 2,
+                    spacing: 1,
+                    labels: {
+                        display: true,
+                        align: 'center',
+                        position: 'middle',
+                        color: '#ffffff',
+                        font: { size: 11, weight: '600', family: 'Inter' },
+                        formatter: (ctx) => {
+                            const d = ctx.raw;
+                            if (!d || !d._data) return '';
+                            const pct = total > 0 ? ((d.v / total) * 100).toFixed(1) : 0;
+                            return d._data.label + '\n' + Number(d.v).toLocaleString('fr-FR', { maximumFractionDigits: 0 }) + ' €\n' + pct + '%';
+                        },
+                    },
+                }],
+            },
             options: {
-                ...getDoughnutOptions(),
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false }, tooltip: {
+                    callbacks: {
+                        title: (items) => items[0]?.raw?._data?.label || '',
+                        label: (item) => {
+                            const v = item.raw.v;
+                            const pct = total > 0 ? ((v / total) * 100).toFixed(1) : 0;
+                            return v.toLocaleString('fr-FR', { maximumFractionDigits: 0 }) + ' € (' + pct + '%)';
+                        },
+                    },
+                }},
                 onClick: (evt, elements) => {
                     if (!elements.length) return;
-                    const label = data.labels[elements[0].index];
-                    toggleCrossFilter('categorie', label);
+                    const el = elements[0];
+                    const label = el.element.$context?.raw?._data?.label;
+                    if (label) toggleCrossFilter('categorie', label);
                 },
             },
         });
     }
 
+    // ── Dec categories — Treemap — click filters by category ──
     function renderDecCategoriesChart() {
         const data = aggregateByCategorie('Décaissement');
         destroyChart('decCategories');
         if (data.labels.length === 0) { $('#chart-dec-categories').getContext('2d').clearRect(0, 0, 9999, 9999); return; }
         const ctx = $('#chart-dec-categories').getContext('2d');
+        const treeData = data.labels.map((l, i) => ({ label: l, value: data.values[i], color: paletteArray[i % paletteArray.length] }));
+        const total = data.values.reduce((s, v) => s + v, 0);
 
         charts.decCategories = new Chart(ctx, {
-            type: 'doughnut',
-            data: { labels: data.labels, datasets: [{ data: data.values, backgroundColor: paletteArray.slice(0, data.labels.length), borderColor: '#1a1428', borderWidth: 2, hoverOffset: 6 }] },
+            type: 'treemap',
+            data: {
+                datasets: [{
+                    tree: treeData,
+                    key: 'value',
+                    groups: ['label'],
+                    backgroundColor: (ctx) => { const d = ctx.raw; return d && d._data ? d._data.color : '#8b5cf6'; },
+                    borderColor: '#1a1428',
+                    borderWidth: 2,
+                    spacing: 1,
+                    labels: {
+                        display: true,
+                        align: 'center',
+                        position: 'middle',
+                        color: '#ffffff',
+                        font: { size: 11, weight: '600', family: 'Inter' },
+                        formatter: (ctx) => {
+                            const d = ctx.raw;
+                            if (!d || !d._data) return '';
+                            const pct = total > 0 ? ((d.v / total) * 100).toFixed(1) : 0;
+                            return d._data.label + '\n' + Number(d.v).toLocaleString('fr-FR', { maximumFractionDigits: 0 }) + ' €\n' + pct + '%';
+                        },
+                    },
+                }],
+            },
             options: {
-                ...getDoughnutOptions(),
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false }, tooltip: {
+                    callbacks: {
+                        title: (items) => items[0]?.raw?._data?.label || '',
+                        label: (item) => {
+                            const v = item.raw.v;
+                            const pct = total > 0 ? ((v / total) * 100).toFixed(1) : 0;
+                            return v.toLocaleString('fr-FR', { maximumFractionDigits: 0 }) + ' € (' + pct + '%)';
+                        },
+                    },
+                }},
                 onClick: (evt, elements) => {
                     if (!elements.length) return;
-                    const label = data.labels[elements[0].index];
-                    toggleCrossFilter('categorie', label);
+                    const el = elements[0];
+                    const label = el.element.$context?.raw?._data?.label;
+                    if (label) toggleCrossFilter('categorie', label);
                 },
             },
         });
