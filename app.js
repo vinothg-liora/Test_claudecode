@@ -1785,7 +1785,7 @@
 
             tr.innerHTML = `
                 <td>${escapeHtml(row.dateStr || '')}</td>
-                <td style="max-width:350px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escapeHtml(row.libelle)}">${escapeHtml(row.libelle)}</td>
+                <td class="dq-cell-libelle">${escapeHtml(row.libelle)}</td>
                 <td>${escapeHtml(row.tiers || '')}</td>
                 <td class="text-right" style="white-space:nowrap">${formatCurrency(row.montant)}</td>
                 <td><select class="dq-select" data-idx="${idx}"><option value="">— Choisir —</option>${options}</select></td>

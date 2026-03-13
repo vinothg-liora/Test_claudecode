@@ -1310,6 +1310,11 @@ body::before {
     border-color: var(--accent);
     outline: none;
 }
+.dq-cell-libelle {
+    word-break: break-word;
+    white-space: normal;
+    min-width: 300px;
+}
 .dq-btn-apply {
     padding: 0.35rem 0.75rem;
     background: var(--accent);
