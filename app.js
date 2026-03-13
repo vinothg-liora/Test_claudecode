@@ -648,6 +648,7 @@
         categorie: null,   // from doughnut clicks
         sens: null,        // 'Encaissement' or 'Décaissement'
         month: null,       // 'YYYY-MM' from flow chart click
+        months: null,      // Set of 'YYYY-MM' from date filter bar (null = all selected)
         equipe: null,      // from teams chart click
         search: '',        // from search input
         typeDropdown: '',  // from type select
@@ -665,6 +666,7 @@
             if (crossFilter.categorie && r.categorie !== crossFilter.categorie) return false;
             if (crossFilter.sens && r.sens !== crossFilter.sens) return false;
             if (crossFilter.month && getMonthKey(r) !== crossFilter.month) return false;
+            if (crossFilter.months && !crossFilter.months.has(getMonthKey(r))) return false;
             if (crossFilter.equipe) {
                 const team = r.equipe && r.equipe.trim() ? r.equipe.trim() : 'Non attribué';
                 if (team !== crossFilter.equipe) return false;
@@ -696,6 +698,7 @@
         crossFilter.sens = null;
         crossFilter.month = null;
         crossFilter.equipe = null;
+        // Note: months (date bar) is NOT cleared by "Tout effacer" — it's a separate persistent filter
         refreshDashboard();
     }
 
@@ -737,12 +740,83 @@
         if (clearBtn) clearBtn.addEventListener('click', clearAllCrossFilters);
     }
 
+    // ── Date Filter Bar ──
+    let allMonthKeys = []; // populated from rawData
+
+    function buildDateFilter() {
+        const monthSet = new Set();
+        rawData.forEach(r => {
+            const mk = getMonthKey(r);
+            if (mk) monthSet.add(mk);
+        });
+        allMonthKeys = [...monthSet].sort();
+
+        renderDateFilterButtons();
+    }
+
+    function renderDateFilterButtons() {
+        const container = $('#date-filter-months');
+        if (!container) return;
+        container.innerHTML = '';
+
+        allMonthKeys.forEach(mk => {
+            const [y, m] = mk.split('-');
+            const label = new Date(+y, +m - 1).toLocaleDateString('fr-FR', { month: 'short', year: '2-digit' });
+            const btn = document.createElement('button');
+            btn.className = 'date-month-btn';
+            btn.dataset.month = mk;
+            btn.textContent = label;
+
+            // Active state: selected if months is null (all) or includes this month
+            if (!crossFilter.months || crossFilter.months.has(mk)) {
+                btn.classList.add('active');
+            }
+
+            btn.addEventListener('click', () => toggleDateMonth(mk));
+            container.appendChild(btn);
+        });
+    }
+
+    function toggleDateMonth(mk) {
+        // If currently null (all selected), switch to "all except this one"
+        if (!crossFilter.months) {
+            crossFilter.months = new Set(allMonthKeys);
+            crossFilter.months.delete(mk);
+        } else if (crossFilter.months.has(mk)) {
+            crossFilter.months.delete(mk);
+        } else {
+            crossFilter.months.add(mk);
+        }
+
+        // If all selected again, set back to null
+        if (crossFilter.months.size === allMonthKeys.length) {
+            crossFilter.months = null;
+        }
+        // If none selected, keep empty set (will show no data)
+
+        renderDateFilterButtons();
+        refreshDashboard();
+    }
+
+    $('#date-select-all').addEventListener('click', () => {
+        crossFilter.months = null;
+        renderDateFilterButtons();
+        refreshDashboard();
+    });
+
+    $('#date-select-none').addEventListener('click', () => {
+        crossFilter.months = new Set();
+        renderDateFilterButtons();
+        refreshDashboard();
+    });
+
     // ══════════════════════════════════════════════
     //  DASHBOARD BUILDER
     // ══════════════════════════════════════════════
 
     function buildDashboard() {
         populateFilters();
+        buildDateFilter();
         refreshDashboard();
     }
 

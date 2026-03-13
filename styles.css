@@ -874,6 +874,63 @@ body::before {
     color: #ef4444 !important;
 }
 
+/* Date Filter Bar */
+.date-filter-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    background: var(--card-bg, rgba(26, 20, 40, 0.6));
+    border: 1px solid rgba(139, 92, 246, 0.12);
+    border-radius: 12px;
+    padding: 0.75rem 1rem;
+    margin-bottom: 1.5rem;
+    flex-wrap: wrap;
+}
+.date-filter-label {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    color: var(--text-secondary, #a5a0b8);
+    font-size: 0.8rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+.date-filter-label svg {
+    color: var(--purple-400, #a78bfa);
+}
+.date-filter-months {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    flex: 1;
+}
+.date-month-btn {
+    background: rgba(139, 92, 246, 0.06);
+    border: 1px solid rgba(139, 92, 246, 0.15);
+    border-radius: 6px;
+    padding: 0.3rem 0.6rem;
+    color: var(--text-muted, #6b6580);
+    font-size: 0.75rem;
+    font-family: 'Inter', sans-serif;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    white-space: nowrap;
+}
+.date-month-btn:hover {
+    background: rgba(139, 92, 246, 0.12);
+    color: var(--text-secondary, #a5a0b8);
+}
+.date-month-btn.active {
+    background: rgba(139, 92, 246, 0.25);
+    border-color: var(--purple-500, #8b5cf6);
+    color: var(--text-primary, #f1f0f5);
+    font-weight: 500;
+}
+.btn-sm {
+    padding: 0.3rem 0.6rem !important;
+    font-size: 0.75rem !important;
+}
+
 /* Upload persist hint */
 .upload-hint-persist {
     color: var(--purple-400, #a78bfa);
