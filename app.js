@@ -931,7 +931,7 @@
             el.textContent = pct.toFixed(1) + ' %';
             if (pct < 10) {
                 el.className = 'kpi-value';
-                el.style.color = '#10b981';
+                el.style.color = '#84cc16';
             } else if (pct <= 30) {
                 el.className = 'kpi-value';
                 el.style.color = '#f59e0b';
@@ -961,38 +961,38 @@
         }).format(val);
     }
 
-    // ── Chart Defaults ──
+    // ── Chart Defaults — Dark Navy palette ──
     const chartColors = {
-        purple: '#8b5cf6', blue: '#3b82f6', green: '#10b981', red: '#ef4444',
-        amber: '#f59e0b', cyan: '#06b6d4', pink: '#ec4899', indigo: '#6366f1',
-        teal: '#14b8a6', orange: '#f97316', lime: '#84cc16', rose: '#f43f5e',
+        indigo: '#6366f1', blue: '#3b82f6', lime: '#84cc16', coral: '#F47458',
+        amber: '#f59e0b', cyan: '#06b6d4', pink: '#ec4899', purple: '#8b5cf6',
+        teal: '#14b8a6', orange: '#f97316', green: '#10b981', rose: '#f43f5e',
         sky: '#38bdf8', fuchsia: '#d946ef', emerald: '#34d399', yellow: '#eab308',
     };
     const paletteArray = Object.values(chartColors);
 
-    // Extended palette for treemaps — 24 distinct, vibrant colors
+    // Extended palette for treemaps — navy/indigo base + varied accents
     const treemapPalette = [
-        '#8b5cf6', '#3b82f6', '#10b981', '#ef4444', '#f59e0b', '#06b6d4',
-        '#ec4899', '#6366f1', '#14b8a6', '#f97316', '#84cc16', '#f43f5e',
-        '#38bdf8', '#d946ef', '#34d399', '#eab308', '#a855f7', '#0ea5e9',
-        '#22d3ee', '#fb7185', '#a3e635', '#c084fc', '#2dd4bf', '#fbbf24',
+        '#1e2a5e', '#2a3a80', '#3b4fa0', '#4f62b8', '#6474cc', '#7c8ae0',
+        '#F47458', '#f59e0b', '#84cc16', '#3b82f6', '#8b5cf6', '#06b6d4',
+        '#ec4899', '#14b8a6', '#ef4444', '#f97316', '#6366f1', '#d946ef',
+        '#10b981', '#38bdf8', '#eab308', '#f43f5e', '#22d3ee', '#a855f7',
     ];
 
     function getChartDefaults() {
         return {
             responsive: true, maintainAspectRatio: false,
             plugins: {
-                legend: { labels: { color: '#a5a0b8', font: { family: 'Inter', size: 12 }, padding: 16 } },
+                legend: { labels: { color: '#8b92a5', font: { family: 'Inter', size: 12 }, padding: 16 } },
                 tooltip: {
-                    backgroundColor: 'rgba(26, 20, 40, 0.95)', titleColor: '#f1f0f5', bodyColor: '#a5a0b8',
-                    borderColor: 'rgba(139, 92, 246, 0.2)', borderWidth: 1, cornerRadius: 8, padding: 12,
+                    backgroundColor: 'rgba(11, 14, 26, 0.95)', titleColor: '#eef0f6', bodyColor: '#8b92a5',
+                    borderColor: 'rgba(99, 102, 241, 0.15)', borderWidth: 1, cornerRadius: 6, padding: 12,
                     titleFont: { family: 'Inter', weight: '600' }, bodyFont: { family: 'Inter' },
                     callbacks: { label: (ctx) => { const val = ctx.parsed.y ?? ctx.parsed; return ctx.dataset.label + ': ' + formatCurrency(val); } },
                 },
             },
             scales: {
-                x: { ticks: { color: '#6b6580', font: { family: 'Inter', size: 11 } }, grid: { color: 'rgba(139, 92, 246, 0.06)' } },
-                y: { ticks: { color: '#6b6580', font: { family: 'Inter', size: 11 }, callback: (v) => formatCurrency(v) }, grid: { color: 'rgba(139, 92, 246, 0.06)' } },
+                x: { ticks: { color: '#555d75', font: { family: 'Inter', size: 11 } }, grid: { color: 'rgba(99, 102, 241, 0.06)' } },
+                y: { ticks: { color: '#555d75', font: { family: 'Inter', size: 11 }, callback: (v) => formatCurrency(v) }, grid: { color: 'rgba(99, 102, 241, 0.06)' } },
             },
         };
     }
@@ -1001,10 +1001,10 @@
         return {
             responsive: true, maintainAspectRatio: false, cutout: '55%',
             plugins: {
-                legend: { position: 'right', labels: { color: '#a5a0b8', font: { family: 'Inter', size: 11 }, padding: 10, boxWidth: 12, boxHeight: 12, borderRadius: 3 } },
+                legend: { position: 'right', labels: { color: '#8b92a5', font: { family: 'Inter', size: 11 }, padding: 10, boxWidth: 12, boxHeight: 12, borderRadius: 3 } },
                 tooltip: {
-                    backgroundColor: 'rgba(26, 20, 40, 0.95)', titleColor: '#f1f0f5', bodyColor: '#a5a0b8',
-                    borderColor: 'rgba(139, 92, 246, 0.2)', borderWidth: 1, cornerRadius: 8, padding: 12,
+                    backgroundColor: 'rgba(11, 14, 26, 0.95)', titleColor: '#eef0f6', bodyColor: '#8b92a5',
+                    borderColor: 'rgba(99, 102, 241, 0.15)', borderWidth: 1, cornerRadius: 6, padding: 12,
                     callbacks: { label: (ctx) => { const total = ctx.dataset.data.reduce((s, v) => s + v, 0); const pct = ((ctx.parsed / total) * 100).toFixed(1); return ctx.label + ': ' + formatCurrency(ctx.parsed) + ' (' + pct + '%)'; } },
                 },
             },
@@ -1060,17 +1060,17 @@
 
         // Highlight selected month
         const selectedIdx = crossFilter.month ? data.keys.indexOf(crossFilter.month) : -1;
-        const greenBg = data.inflows.map((_, i) => i === selectedIdx ? 'rgba(16, 185, 129, 1)' : 'rgba(16, 185, 129, 0.7)');
-        const redBg = data.outflows.map((_, i) => i === selectedIdx ? 'rgba(239, 68, 68, 1)' : 'rgba(239, 68, 68, 0.7)');
+        const encBg = data.inflows.map((_, i) => i === selectedIdx ? 'rgba(132, 204, 22, 1)' : 'rgba(132, 204, 22, 0.7)');
+        const decBg = data.outflows.map((_, i) => i === selectedIdx ? 'rgba(99, 102, 241, 1)' : 'rgba(99, 102, 241, 0.7)');
 
         charts.flow = new Chart(ctx, {
             type: 'bar',
             data: {
                 labels: data.labels,
                 datasets: [
-                    { label: 'Encaissements', data: data.inflows, backgroundColor: greenBg, borderColor: '#10b981', borderWidth: 1, borderRadius: 4 },
-                    { label: 'Décaissements', data: data.outflows, backgroundColor: redBg, borderColor: '#ef4444', borderWidth: 1, borderRadius: 4 },
-                    { label: 'Solde net', data: data.net, type: 'line', borderColor: '#8b5cf6', backgroundColor: 'rgba(139, 92, 246, 0.1)', borderWidth: 2, pointRadius: 4, pointBackgroundColor: '#8b5cf6', tension: 0.3, fill: true },
+                    { label: 'Encaissements', data: data.inflows, backgroundColor: encBg, borderColor: '#84cc16', borderWidth: 1, borderRadius: 3 },
+                    { label: 'Décaissements', data: data.outflows, backgroundColor: decBg, borderColor: '#6366f1', borderWidth: 1, borderRadius: 3 },
+                    { label: 'Solde net', data: data.net, type: 'line', borderColor: '#F47458', backgroundColor: 'rgba(244, 116, 88, 0.08)', borderWidth: 2, pointRadius: 4, pointBackgroundColor: '#F47458', tension: 0.3, fill: true },
                 ],
             },
             options: {
@@ -1098,12 +1098,12 @@
         const ctx = $('#chart-cumulative').getContext('2d');
         const defaults = getChartDefaults();
         const gradient = ctx.createLinearGradient(0, 0, 0, 300);
-        gradient.addColorStop(0, 'rgba(139, 92, 246, 0.25)');
-        gradient.addColorStop(1, 'rgba(139, 92, 246, 0)');
+        gradient.addColorStop(0, 'rgba(244, 116, 88, 0.2)');
+        gradient.addColorStop(1, 'rgba(244, 116, 88, 0)');
 
         charts.cumulative = new Chart(ctx, {
             type: 'line',
-            data: { labels: data.labels, datasets: [{ label: 'Solde cumulé', data: cumData, borderColor: '#8b5cf6', backgroundColor: gradient, borderWidth: 2.5, fill: true, tension: 0.4, pointRadius: 4, pointBackgroundColor: '#8b5cf6', pointBorderColor: '#1a1428', pointBorderWidth: 2 }] },
+            data: { labels: data.labels, datasets: [{ label: 'Solde cumulé', data: cumData, borderColor: '#F47458', backgroundColor: gradient, borderWidth: 2.5, fill: true, tension: 0.4, pointRadius: 4, pointBackgroundColor: '#F47458', pointBorderColor: '#0b0e1a', pointBorderWidth: 2 }] },
             options: {
                 ...defaults,
                 onClick: (evt, elements) => {
@@ -1128,7 +1128,7 @@
                         if (!d || !d._data) return '#8b5cf6';
                         return colorMap[d._data.label] || '#8b5cf6';
                     },
-                    borderColor: '#0f0b1a',
+                    borderColor: '#0b0e1a',
                     borderWidth: 3,
                     spacing: 2,
                     labels: {
@@ -1196,9 +1196,9 @@
 
     // ── Type Financeur Chart (enc only) — Interco / Public / Privé ──
     const FINANCEUR_COLORS = {
-        'Interco': '#f59e0b',  // amber
+        'Interco': '#F47458',  // coral
         'Public': '#3b82f6',   // blue
-        'Privé': '#10b981',    // green
+        'Privé': '#84cc16',    // lime
     };
 
     function renderFinanceurChart() {
@@ -1225,7 +1225,7 @@
                 datasets: [{
                     data: sorted.map(([, v]) => v),
                     backgroundColor: sorted.map(([k]) => FINANCEUR_COLORS[k] || '#8b5cf6'),
-                    borderColor: '#1a1428',
+                    borderColor: '#0b0e1a',
                     borderWidth: 2,
                     hoverOffset: 6,
                 }],
@@ -1330,7 +1330,7 @@
                 datasets: [{
                     data: sorted.map(([, v]) => v),
                     backgroundColor: sorted.map(([k]) => PAIEMENT_COLORS[k] || '#8b5cf6'),
-                    borderColor: '#1a1428',
+                    borderColor: '#0b0e1a',
                     borderWidth: 2,
                     hoverOffset: 6,
                 }],
@@ -1404,7 +1404,7 @@
 
         charts.teams = new Chart(ctx, {
             type: 'doughnut',
-            data: { labels: sorted.map(([k]) => k), datasets: [{ data: sorted.map(([, v]) => v), backgroundColor: paletteArray.slice(0, sorted.length), borderColor: '#1a1428', borderWidth: 2 }] },
+            data: { labels: sorted.map(([k]) => k), datasets: [{ data: sorted.map(([, v]) => v), backgroundColor: paletteArray.slice(0, sorted.length), borderColor: '#0b0e1a', borderWidth: 2 }] },
             options: {
                 ...getDoughnutOptions(),
                 onClick: (evt, elements) => {
