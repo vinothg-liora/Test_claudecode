@@ -1252,6 +1252,18 @@ body::before {
     font-size: 0.85rem;
     margin: 0;
 }
+.dq-filter-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    margin-top: 1rem;
+}
+.dq-filter-bar label {
+    color: var(--text-secondary);
+    font-size: 0.82rem;
+    font-weight: 500;
+    white-space: nowrap;
+}
 .dq-section {
     margin-bottom: 2rem;
 }

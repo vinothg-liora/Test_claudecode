@@ -1717,9 +1717,39 @@
         'Interco', 'Alternance (OPCO)', 'CPF', 'Reconversion', 'B2B', 'B2C',
     ];
 
+    const MONTH_NAMES = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
+
+    function getDqMonthKey(row) {
+        if (!row.date) return null;
+        const d = row.date;
+        return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+    }
+
+    function populateDqMonthFilter(rows) {
+        const sel = $('#dq-filter-month');
+        const prev = sel.value;
+        const months = new Set();
+        rows.forEach(r => { const k = getDqMonthKey(r); if (k) months.add(k); });
+        const sorted = [...months].sort();
+        sel.innerHTML = '<option value="">Tous les mois</option>';
+        sorted.forEach(k => {
+            const [y, m] = k.split('-');
+            const label = MONTH_NAMES[parseInt(m) - 1] + ' ' + y;
+            sel.innerHTML += `<option value="${k}"${k === prev ? ' selected' : ''}>${label}</option>`;
+        });
+    }
+
     function renderDataQuality() {
-        const diversRows = rawData.filter(r => r.sens === 'Décaissement' && r.categorie === 'DIVERS');
-        const autresRows = rawData.filter(r => r.sens === 'Encaissement' && r.categorie === 'Autres revenus');
+        const allDivers = rawData.filter(r => r.sens === 'Décaissement' && r.categorie === 'DIVERS');
+        const allAutres = rawData.filter(r => r.sens === 'Encaissement' && r.categorie === 'Autres revenus');
+
+        populateDqMonthFilter([...allDivers, ...allAutres]);
+
+        const monthFilter = $('#dq-filter-month').value;
+        const filterByMonth = (rows) => monthFilter ? rows.filter(r => getDqMonthKey(r) === monthFilter) : rows;
+
+        const diversRows = filterByMonth(allDivers);
+        const autresRows = filterByMonth(allAutres);
 
         $('#dq-count-divers').textContent = diversRows.length;
         $('#dq-count-autres').textContent = autresRows.length;
@@ -1727,6 +1757,8 @@
         renderDqTable('dq-body-divers', diversRows, DEC_CATEGORIES);
         renderDqTable('dq-body-autres', autresRows, ENC_CATEGORIES);
     }
+
+    $('#dq-filter-month').addEventListener('change', renderDataQuality);
 
     function renderDqTable(tbodyId, rows, categories) {
         const tbody = document.getElementById(tbodyId);
