@@ -530,6 +530,11 @@ body::before {
     color: var(--purple-400);
 }
 
+.kpi-volatility {
+    background: rgba(251, 191, 36, 0.12);
+    color: #fbbf24;
+}
+
 .kpi-data {
     display: flex;
     flex-direction: column;

@@ -896,6 +896,54 @@
         $('#kpi-net').className = 'kpi-value ' + (net >= 0 ? 'amount-positive' : 'amount-negative');
         $('#kpi-count').textContent = data.length.toLocaleString('fr-FR');
 
+        // Monthly totals for averages & volatility
+        const monthlyInflows = {};
+        const monthlyOutflows = {};
+        data.forEach(r => {
+            if (!r.date || isNaN(r.date.getTime())) return;
+            const key = r.date.getFullYear() + '-' + String(r.date.getMonth() + 1).padStart(2, '0');
+            if (r.montant > 0) monthlyInflows[key] = (monthlyInflows[key] || 0) + r.montant;
+            if (r.montant < 0) monthlyOutflows[key] = (monthlyOutflows[key] || 0) + Math.abs(r.montant);
+        });
+
+        const inflowVals = Object.values(monthlyInflows);
+        const outflowVals = Object.values(monthlyOutflows);
+        const numMonths = Math.max(inflowVals.length, outflowVals.length, 1);
+
+        // Average per month
+        const avgInflows = inflowVals.length > 0 ? inflowVals.reduce((s, v) => s + v, 0) / inflowVals.length : 0;
+        const avgOutflows = outflowVals.length > 0 ? outflowVals.reduce((s, v) => s + v, 0) / outflowVals.length : 0;
+        $('#kpi-avg-inflows').textContent = formatCurrency(avgInflows);
+        $('#kpi-avg-inflows').className = 'kpi-value amount-positive';
+        $('#kpi-avg-outflows').textContent = formatCurrency(-avgOutflows);
+        $('#kpi-avg-outflows').className = 'kpi-value amount-negative';
+
+        // Volatility (coefficient of variation)
+        function calcVolatility(values) {
+            if (values.length < 2) return 0;
+            const mean = values.reduce((s, v) => s + v, 0) / values.length;
+            if (mean === 0) return 0;
+            const variance = values.reduce((s, v) => s + (v - mean) ** 2, 0) / values.length;
+            return (Math.sqrt(variance) / mean) * 100;
+        }
+
+        function applyVolatilityStyle(el, pct) {
+            el.textContent = pct.toFixed(1) + ' %';
+            if (pct < 10) {
+                el.className = 'kpi-value';
+                el.style.color = '#10b981';
+            } else if (pct <= 30) {
+                el.className = 'kpi-value';
+                el.style.color = '#f59e0b';
+            } else {
+                el.className = 'kpi-value';
+                el.style.color = '#ef4444';
+            }
+        }
+
+        applyVolatilityStyle($('#kpi-vol-inflows'), calcVolatility(inflowVals));
+        applyVolatilityStyle($('#kpi-vol-outflows'), calcVolatility(outflowVals));
+
         const dates = data.map(r => r.date).filter(d => d && !isNaN(d.getTime()));
         if (dates.length > 0) {
             const minDate = new Date(Math.min(...dates));
