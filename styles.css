@@ -1291,15 +1291,20 @@ body::before {
     font-weight: 700;
 }
 .dq-table select {
-    background: var(--bg-input);
+    background: #ffffff;
     border: 1px solid var(--border-color);
     border-radius: var(--radius-sm);
-    color: var(--text-primary);
+    color: var(--bg-primary);
     padding: 0.35rem 0.5rem;
     font-family: 'Inter', sans-serif;
     font-size: 0.78rem;
+    font-weight: 500;
     min-width: 180px;
     cursor: pointer;
+}
+.dq-table select option {
+    background: #ffffff;
+    color: var(--bg-primary);
 }
 .dq-table select:focus {
     border-color: var(--accent);
