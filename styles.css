@@ -970,6 +970,17 @@ body::before {
     padding: 0.3rem 0.6rem !important;
     font-size: 0.75rem !important;
 }
+.date-filter-separator {
+    width: 1px;
+    height: 1.2rem;
+    background: var(--border-color);
+}
+#btn-exclude-interco.active {
+    background: var(--accent-bg);
+    border-color: var(--accent);
+    color: var(--accent);
+    font-weight: 600;
+}
 
 /* Upload persist hint */
 .upload-hint-persist {

@@ -693,6 +693,7 @@
         typeDropdown: '',  // from type select
         teamDropdown: '',  // from team select
         catDropdown: '',   // from category select
+        excludeInterco: false, // toggle to hide Interco transactions
     };
 
     function getMonthKey(r) {
@@ -702,6 +703,7 @@
 
     function computeFilteredData() {
         filteredData = rawData.filter(r => {
+            if (crossFilter.excludeInterco && r.categorie === 'Interco') return false;
             if (crossFilter.categorie && r.categorie !== crossFilter.categorie) return false;
             if (crossFilter.sens && r.sens !== crossFilter.sens) return false;
             if (crossFilter.month && getMonthKey(r) !== crossFilter.month) return false;
@@ -741,12 +743,13 @@
         crossFilter.equipe = null;
         crossFilter.financeur = null;
         crossFilter.paiement = null;
+        crossFilter.excludeInterco = false;
         // Note: months (date bar) is NOT cleared by "Tout effacer" — it's a separate persistent filter
         refreshDashboard();
     }
 
     function hasCrossFilters() {
-        return crossFilter.categorie || crossFilter.sens || crossFilter.month || crossFilter.equipe || crossFilter.financeur || crossFilter.paiement;
+        return crossFilter.categorie || crossFilter.sens || crossFilter.month || crossFilter.equipe || crossFilter.financeur || crossFilter.paiement || crossFilter.excludeInterco;
     }
 
     function renderFilterChips() {
@@ -770,12 +773,22 @@
             html += `<span class="filter-chip">${labels[key]}: ${escapeHtml(display)}<span class="filter-chip-close" data-key="${key}">&times;</span></span>`;
         }
 
+        if (crossFilter.excludeInterco) {
+            html += `<span class="filter-chip">Hors Interco<span class="filter-chip-close" data-key="excludeInterco">&times;</span></span>`;
+        }
+
         html += '<button class="filter-clear-all">Tout effacer</button>';
         container.innerHTML = html;
 
         container.querySelectorAll('.filter-chip-close').forEach(el => {
             el.addEventListener('click', () => {
-                crossFilter[el.dataset.key] = null;
+                const k = el.dataset.key;
+                if (k === 'excludeInterco') {
+                    crossFilter.excludeInterco = false;
+                    updateIntercoButtonState();
+                } else {
+                    crossFilter[k] = null;
+                }
                 refreshDashboard();
             });
         });
@@ -850,6 +863,18 @@
     $('#date-select-none').addEventListener('click', () => {
         crossFilter.months = new Set();
         renderDateFilterButtons();
+        refreshDashboard();
+    });
+
+    function updateIntercoButtonState() {
+        const btn = $('#btn-exclude-interco');
+        if (!btn) return;
+        btn.classList.toggle('active', crossFilter.excludeInterco);
+    }
+
+    $('#btn-exclude-interco').addEventListener('click', () => {
+        crossFilter.excludeInterco = !crossFilter.excludeInterco;
+        updateIntercoButtonState();
         refreshDashboard();
     });
 
