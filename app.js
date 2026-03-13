@@ -970,6 +970,14 @@
     };
     const paletteArray = Object.values(chartColors);
 
+    // Extended palette for treemaps — 24 distinct, vibrant colors
+    const treemapPalette = [
+        '#8b5cf6', '#3b82f6', '#10b981', '#ef4444', '#f59e0b', '#06b6d4',
+        '#ec4899', '#6366f1', '#14b8a6', '#f97316', '#84cc16', '#f43f5e',
+        '#38bdf8', '#d946ef', '#34d399', '#eab308', '#a855f7', '#0ea5e9',
+        '#22d3ee', '#fb7185', '#a3e635', '#c084fc', '#2dd4bf', '#fbbf24',
+    ];
+
     function getChartDefaults() {
         return {
             responsive: true, maintainAspectRatio: false,
@@ -1106,37 +1114,35 @@
         });
     }
 
-    // ── Enc categories — Treemap — click filters by category ──
-    function renderEncCategoriesChart() {
-        const data = aggregateByCategorie('Encaissement');
-        destroyChart('encCategories');
-        if (data.labels.length === 0) { $('#chart-enc-categories').getContext('2d').clearRect(0, 0, 9999, 9999); return; }
-        const ctx = $('#chart-enc-categories').getContext('2d');
-        const treeData = data.labels.map((l, i) => ({ label: l, value: data.values[i], color: paletteArray[i % paletteArray.length] }));
-        const total = data.values.reduce((s, v) => s + v, 0);
-
-        charts.encCategories = new Chart(ctx, {
+    // ── Helper: build treemap config for a category chart ──
+    function buildTreemapConfig(data, total, colorMap) {
+        return {
             type: 'treemap',
             data: {
                 datasets: [{
-                    tree: treeData,
+                    tree: data.labels.map((l, i) => ({ label: l, value: data.values[i] })),
                     key: 'value',
                     groups: ['label'],
-                    backgroundColor: (ctx) => { const d = ctx.raw; return d && d._data ? d._data.color : '#8b5cf6'; },
-                    borderColor: '#1a1428',
-                    borderWidth: 2,
-                    spacing: 1,
+                    backgroundColor: (c) => {
+                        const d = c.raw;
+                        if (!d || !d._data) return '#8b5cf6';
+                        return colorMap[d._data.label] || '#8b5cf6';
+                    },
+                    borderColor: '#0f0b1a',
+                    borderWidth: 3,
+                    spacing: 2,
                     labels: {
                         display: true,
                         align: 'center',
                         position: 'middle',
+                        overflow: 'fit',
                         color: '#ffffff',
-                        font: { size: 11, weight: '600', family: 'Inter' },
-                        formatter: (ctx) => {
-                            const d = ctx.raw;
+                        font: { size: 12, weight: '700', family: 'Inter' },
+                        formatter: (c) => {
+                            const d = c.raw;
                             if (!d || !d._data) return '';
                             const pct = total > 0 ? ((d.v / total) * 100).toFixed(1) : 0;
-                            return d._data.label + '\n' + Number(d.v).toLocaleString('fr-FR', { maximumFractionDigits: 0 }) + ' €\n' + pct + '%';
+                            return [d._data.label, Number(d.v).toLocaleString('fr-FR', { maximumFractionDigits: 0 }) + ' €', pct + '%'];
                         },
                     },
                 }],
@@ -1161,7 +1167,19 @@
                     if (label) toggleCrossFilter('categorie', label);
                 },
             },
-        });
+        };
+    }
+
+    // ── Enc categories — Treemap — click filters by category ──
+    function renderEncCategoriesChart() {
+        const data = aggregateByCategorie('Encaissement');
+        destroyChart('encCategories');
+        if (data.labels.length === 0) { $('#chart-enc-categories').getContext('2d').clearRect(0, 0, 9999, 9999); return; }
+        const ctx = $('#chart-enc-categories').getContext('2d');
+        const total = data.values.reduce((s, v) => s + v, 0);
+        const colorMap = {};
+        data.labels.forEach((l, i) => { colorMap[l] = treemapPalette[i % treemapPalette.length]; });
+        charts.encCategories = new Chart(ctx, buildTreemapConfig(data, total, colorMap));
     }
 
     // ── Dec categories — Treemap — click filters by category ──
@@ -1170,56 +1188,10 @@
         destroyChart('decCategories');
         if (data.labels.length === 0) { $('#chart-dec-categories').getContext('2d').clearRect(0, 0, 9999, 9999); return; }
         const ctx = $('#chart-dec-categories').getContext('2d');
-        const treeData = data.labels.map((l, i) => ({ label: l, value: data.values[i], color: paletteArray[i % paletteArray.length] }));
         const total = data.values.reduce((s, v) => s + v, 0);
-
-        charts.decCategories = new Chart(ctx, {
-            type: 'treemap',
-            data: {
-                datasets: [{
-                    tree: treeData,
-                    key: 'value',
-                    groups: ['label'],
-                    backgroundColor: (ctx) => { const d = ctx.raw; return d && d._data ? d._data.color : '#8b5cf6'; },
-                    borderColor: '#1a1428',
-                    borderWidth: 2,
-                    spacing: 1,
-                    labels: {
-                        display: true,
-                        align: 'center',
-                        position: 'middle',
-                        color: '#ffffff',
-                        font: { size: 11, weight: '600', family: 'Inter' },
-                        formatter: (ctx) => {
-                            const d = ctx.raw;
-                            if (!d || !d._data) return '';
-                            const pct = total > 0 ? ((d.v / total) * 100).toFixed(1) : 0;
-                            return d._data.label + '\n' + Number(d.v).toLocaleString('fr-FR', { maximumFractionDigits: 0 }) + ' €\n' + pct + '%';
-                        },
-                    },
-                }],
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: { legend: { display: false }, tooltip: {
-                    callbacks: {
-                        title: (items) => items[0]?.raw?._data?.label || '',
-                        label: (item) => {
-                            const v = item.raw.v;
-                            const pct = total > 0 ? ((v / total) * 100).toFixed(1) : 0;
-                            return v.toLocaleString('fr-FR', { maximumFractionDigits: 0 }) + ' € (' + pct + '%)';
-                        },
-                    },
-                }},
-                onClick: (evt, elements) => {
-                    if (!elements.length) return;
-                    const el = elements[0];
-                    const label = el.element.$context?.raw?._data?.label;
-                    if (label) toggleCrossFilter('categorie', label);
-                },
-            },
-        });
+        const colorMap = {};
+        data.labels.forEach((l, i) => { colorMap[l] = treemapPalette[i % treemapPalette.length]; });
+        charts.decCategories = new Chart(ctx, buildTreemapConfig(data, total, colorMap));
     }
 
     // ── Type Financeur Chart (enc only) — Interco / Public / Privé ──
