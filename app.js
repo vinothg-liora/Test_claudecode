@@ -109,34 +109,70 @@
     }
 
     // ── Learned Categories Store ──
-    // Maps normalized libellé → { category, sens, count, date }
+    // Maps cleaned libellé keywords → { category, sens, count, date, originalLibelle }
     const STORAGE_LEARNED_KEY = 'liora_learned_categories';
     let _learnedCache = {}; // in-memory cache, loaded at startup
+
+    // Strip banking noise from libellé to extract meaningful keywords
+    function cleanLibelleForLearning(libelle) {
+        let s = normUpper(libelle);
+        // Remove common banking operation prefixes
+        s = s.replace(/^(VIR(EMENT)?\s*(SEPA)?\s*(EMIS|RECU|INST)?|PRLV\s*(SEPA)?|PRELEVEMENT\s*(SEPA)?|CHQ\s*N?\d*|CB\s*\d*|CARTE\s*\d*|REM\s*CHQ|AVOIR|ECHEANCE)\s*/i, '');
+        // Remove reference numbers (/REF..., /PID..., /MOTIF..., /ID..., etc.)
+        s = s.replace(/\/[A-Z]{2,10}\s*[:\-]?\s*[A-Z0-9\-]+/g, '');
+        // Remove standalone dates (DD/MM/YYYY, DD-MM-YYYY, DDMMYY, etc.)
+        s = s.replace(/\b\d{1,2}[\/-]\d{1,2}[\/-]\d{2,4}\b/g, '');
+        s = s.replace(/\b\d{6,8}\b/g, ''); // DDMMYYYY or DDMMYY
+        // Remove standalone long numbers (reference/account numbers, 5+ digits)
+        s = s.replace(/\b\d{5,}\b/g, '');
+        // Remove "N°..." or "NO..." patterns
+        s = s.replace(/\bN[O°]\s*\d+/gi, '');
+        // Collapse whitespace
+        s = s.replace(/\s+/g, ' ').trim();
+        return s;
+    }
 
     async function loadLearnedCategories() {
         try { _learnedCache = (await idbGet(STORAGE_LEARNED_KEY)) || {}; } catch { _learnedCache = {}; }
     }
 
-    async function learnCategoryBatch(entries) {
-        for (const { libelle, category, sens } of entries) {
-            const key = normUpper(libelle);
-            _learnedCache[key] = { category, sens, count: (_learnedCache[key]?.count || 0) + 1, date: Date.now() };
-        }
+    async function saveLearnedCategories() {
         await idbSet(STORAGE_LEARNED_KEY, _learnedCache);
     }
 
-    function findLearnedCategory(libelleNorm, sens) {
-        // Exact match
-        if (_learnedCache[libelleNorm] && _learnedCache[libelleNorm].sens === sens) {
-            return _learnedCache[libelleNorm].category;
+    async function learnCategoryBatch(entries) {
+        for (const { libelle, category, sens } of entries) {
+            const key = cleanLibelleForLearning(libelle);
+            if (key.length < 3) continue; // skip if cleaned key is too short
+            _learnedCache[key] = {
+                category, sens,
+                count: (_learnedCache[key]?.count || 0) + 1,
+                date: Date.now(),
+                originalLibelle: libelle, // keep original for display
+            };
         }
-        // Partial match: learned key contained in libellé or vice versa
+        await saveLearnedCategories();
+    }
+
+    async function deleteLearnedRule(key) {
+        delete _learnedCache[key];
+        await saveLearnedCategories();
+    }
+
+    function findLearnedCategory(libelleNorm, sens) {
+        const cleaned = cleanLibelleForLearning(libelleNorm);
+        // Exact match on cleaned key
+        if (_learnedCache[cleaned] && _learnedCache[cleaned].sens === sens) {
+            return _learnedCache[cleaned].category;
+        }
+        // Partial match: cleaned libellé contains a learned key or vice versa
         let bestMatch = null;
         let bestLen = 0;
         for (const [key, val] of Object.entries(_learnedCache)) {
             if (val.sens !== sens) continue;
-            if (libelleNorm.includes(key) || key.includes(libelleNorm)) {
-                const matchLen = Math.min(key.length, libelleNorm.length);
+            if (key.length < 3) continue;
+            if (cleaned.includes(key) || key.includes(cleaned)) {
+                const matchLen = Math.min(key.length, cleaned.length);
                 if (matchLen > bestLen) {
                     bestLen = matchLen;
                     bestMatch = val.category;
@@ -1841,6 +1877,56 @@
         });
     }
 
+    // ── Learned Rules Rendering (in Fichiers tab) ──
+    function renderLearnedRules() {
+        const container = document.getElementById('ft-learned-rules');
+        const clearBtn = document.getElementById('ft-clear-learned');
+        if (!container) return;
+        const entries = Object.entries(_learnedCache);
+        if (entries.length === 0) {
+            container.innerHTML = '<p class="ft-empty">Aucune règle apprise.</p>';
+            if (clearBtn) clearBtn.style.display = 'none';
+            return;
+        }
+        if (clearBtn) clearBtn.style.display = '';
+        // Sort by date descending
+        entries.sort((a, b) => (b[1].date || 0) - (a[1].date || 0));
+        let html = '';
+        entries.forEach(([key, val]) => {
+            const sensLabel = val.sens === 'Encaissement' ? 'Enc.' : 'Déc.';
+            const sensClass = val.sens === 'Encaissement' ? 'ft-rule-enc' : 'ft-rule-dec';
+            html += `<div class="ft-rule-item">
+                <div class="ft-rule-content">
+                    <span class="ft-rule-badge ${sensClass}">${sensLabel}</span>
+                    <span class="ft-rule-key" title="Mot-clé nettoyé">${escapeHtml(key)}</span>
+                    <span class="ft-rule-arrow">→</span>
+                    <span class="ft-rule-cat">${escapeHtml(val.category)}</span>
+                </div>
+                <button class="ft-btn-delete" data-rule-key="${escapeHtml(key)}" title="Supprimer cette règle">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+            </div>`;
+        });
+        container.innerHTML = html;
+
+        // Wire delete buttons
+        container.querySelectorAll('.ft-btn-delete[data-rule-key]').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                const ruleKey = btn.dataset.ruleKey;
+                await deleteLearnedRule(ruleKey);
+                renderLearnedRules();
+            });
+        });
+    }
+
+    // Clear all learned rules
+    document.getElementById('ft-clear-learned').addEventListener('click', async () => {
+        if (!confirm('Supprimer toutes les règles apprises ?')) return;
+        _learnedCache = {};
+        await saveLearnedCategories();
+        renderLearnedRules();
+    });
+
     // ── Auto-load from IndexedDB on startup ──
     (async function autoLoad() {
         await migrateFromLocalStorage();
@@ -1871,7 +1957,7 @@
             if (target) target.classList.add('active');
             if (btn.dataset.tab === 'dataquality') renderDataQuality();
             if (btn.dataset.tab === 'simulation') renderSimulationTab();
-            if (btn.dataset.tab === 'fichiers') renderFileHistory();
+            if (btn.dataset.tab === 'fichiers') { renderFileHistory(); renderLearnedRules(); }
         });
     });
 
