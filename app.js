@@ -1837,7 +1837,7 @@
         if (!apiKey) throw new Error('Clé API manquante');
 
         const catList = categories.join(', ');
-        const resp = await fetch('https://api.anthropic.com/v1/messages', {
+        const resp = await fetchWithRetry('https://api.anthropic.com/v1/messages', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -1879,45 +1879,177 @@ Réponds UNIQUEMENT en JSON valide (pas de markdown) :
         return JSON.parse(text);
     }
 
+    // ── Batch API call: classify multiple transactions at once ──
+    async function callClaudeBatch(transactions, categories) {
+        const apiKey = getDqApiKey();
+        if (!apiKey) throw new Error('Clé API manquante');
+
+        const catList = categories.join(', ');
+        const txList = transactions.map((t, i) =>
+            `${i + 1}. Libellé: "${t.libelle}" | Montant: ${t.montant} € | Sens: ${t.sens}`
+        ).join('\n');
+
+        const resp = await fetchWithRetry('https://api.anthropic.com/v1/messages', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'x-api-key': apiKey,
+                'anthropic-version': '2023-06-01',
+                'anthropic-dangerous-direct-browser-access': 'true',
+            },
+            body: JSON.stringify({
+                model: 'claude-sonnet-4-20250514',
+                max_tokens: 1500,
+                messages: [{
+                    role: 'user',
+                    content: `Tu es un expert comptable français. Classe chacune de ces transactions bancaires dans une des catégories proposées.
+
+Transactions :
+${txList}
+
+Catégories possibles : ${catList}
+
+Réponds UNIQUEMENT en JSON valide (pas de markdown), sous forme d'un tableau :
+[{"categorie": "...", "confiance": 85, "raison": "explication courte"}, ...]
+
+- Un élément par transaction, dans le MÊME ORDRE.
+- "categorie" doit être EXACTEMENT une des catégories de la liste.
+- "confiance" est un entier de 0 à 100.
+- "raison" est une phrase courte en français.`
+                }]
+            })
+        });
+
+        if (!resp.ok) {
+            const errBody = await resp.text();
+            throw new Error(`API ${resp.status}: ${errBody}`);
+        }
+
+        const data = await resp.json();
+        const text = data.content[0].text.trim();
+        return JSON.parse(text);
+    }
+
+    // ── Retry with exponential backoff for 429 / 5xx ──
+    async function fetchWithRetry(url, options, maxRetries = 4) {
+        for (let attempt = 0; attempt <= maxRetries; attempt++) {
+            try {
+                const resp = await fetch(url, options);
+                if (resp.status === 429 || resp.status >= 500) {
+                    if (attempt < maxRetries) {
+                        const delay = Math.pow(2, attempt + 1) * 1000; // 2s, 4s, 8s, 16s
+                        await new Promise(r => setTimeout(r, delay));
+                        continue;
+                    }
+                }
+                return resp;
+            } catch (e) {
+                if (attempt < maxRetries) {
+                    const delay = Math.pow(2, attempt + 1) * 1000;
+                    await new Promise(r => setTimeout(r, delay));
+                    continue;
+                }
+                throw e;
+            }
+        }
+    }
+
+    function displaySuggestion(tr, result, categories) {
+        const suggCell = tr.querySelector('.dq-suggestion');
+        const conf = result.confiance || 0;
+        const confClass = conf >= 80 ? 'high' : conf >= 50 ? 'med' : 'low';
+
+        suggCell.innerHTML = `
+            <div class="dq-sugg-result">
+                <div class="dq-sugg-cat">${escapeHtml(result.categorie)}</div>
+                <div class="dq-sugg-conf dq-conf-${confClass}">${conf}%</div>
+                <div class="dq-sugg-reason">${escapeHtml(result.raison)}</div>
+                <div class="dq-sugg-actions">
+                    <button class="dq-btn-confirm" data-cat="${escapeHtml(result.categorie)}" title="Confirmer">Confirmer</button>
+                    <button class="dq-btn-edit" title="Modifier">Modifier</button>
+                </div>
+            </div>
+        `;
+
+        suggCell.querySelector('.dq-btn-confirm').addEventListener('click', () => {
+            const sel = tr.querySelector('.dq-select');
+            sel.value = result.categorie;
+            sel.dispatchEvent(new Event('change'));
+            tr.classList.add('dq-row-confirmed');
+            suggCell.querySelector('.dq-sugg-actions').innerHTML = '<span class="dq-confirmed-badge">Confirmé</span>';
+        });
+
+        suggCell.querySelector('.dq-btn-edit').addEventListener('click', () => {
+            tr.querySelector('.dq-select').focus();
+        });
+    }
+
     async function suggestForRow(tr, row, categories) {
-        const idx = parseInt(tr.querySelector('.dq-select').dataset.idx);
         const suggCell = tr.querySelector('.dq-suggestion');
         suggCell.innerHTML = '<span class="dq-loading">Analyse...</span>';
 
         try {
             const result = await callClaudeForCategory(row.libelle, row.montant, row.sens, categories);
-            const conf = result.confiance || 0;
-            const confClass = conf >= 80 ? 'high' : conf >= 50 ? 'med' : 'low';
-
-            suggCell.innerHTML = `
-                <div class="dq-sugg-result">
-                    <div class="dq-sugg-cat">${escapeHtml(result.categorie)}</div>
-                    <div class="dq-sugg-conf dq-conf-${confClass}">${conf}%</div>
-                    <div class="dq-sugg-reason">${escapeHtml(result.raison)}</div>
-                    <div class="dq-sugg-actions">
-                        <button class="dq-btn-confirm" data-cat="${escapeHtml(result.categorie)}" title="Confirmer">Confirmer</button>
-                        <button class="dq-btn-edit" title="Modifier">Modifier</button>
-                    </div>
-                </div>
-            `;
-
-            // Wire confirm button — sets dropdown and marks row
-            suggCell.querySelector('.dq-btn-confirm').addEventListener('click', () => {
-                const sel = tr.querySelector('.dq-select');
-                sel.value = result.categorie;
-                sel.dispatchEvent(new Event('change'));
-                tr.classList.add('dq-row-confirmed');
-                suggCell.querySelector('.dq-sugg-actions').innerHTML = '<span class="dq-confirmed-badge">Confirmé</span>';
-            });
-
-            // Wire edit button — just focuses the dropdown
-            suggCell.querySelector('.dq-btn-edit').addEventListener('click', () => {
-                const sel = tr.querySelector('.dq-select');
-                sel.focus();
-            });
-
+            displaySuggestion(tr, result, categories);
         } catch (e) {
             suggCell.innerHTML = `<span class="dq-sugg-error" title="${escapeHtml(e.message)}">Erreur</span>`;
+        }
+    }
+
+    // ── Batch suggest: groups of 5 transactions per API call ──
+    const BATCH_SIZE = 5;
+
+    async function suggestBatch(trs, rows, categories, suggestBtn) {
+        const pending = [];
+        for (let i = 0; i < trs.length; i++) {
+            const tr = trs[i];
+            if (tr.querySelector('.dq-empty')) continue;
+            if (tr.classList.contains('dq-row-confirmed')) continue;
+            pending.push({ tr, row: rows[i], index: i });
+        }
+
+        if (pending.length === 0) return;
+
+        let processed = 0;
+        for (let b = 0; b < pending.length; b += BATCH_SIZE) {
+            const batch = pending.slice(b, b + BATCH_SIZE);
+
+            // Show loading state for this batch
+            batch.forEach(({ tr }) => {
+                tr.querySelector('.dq-suggestion').innerHTML = '<span class="dq-loading">Analyse...</span>';
+            });
+
+            suggestBtn.textContent = `Analyse... (${processed}/${pending.length})`;
+
+            try {
+                const results = await callClaudeBatch(
+                    batch.map(({ row }) => ({ libelle: row.libelle, montant: row.montant, sens: row.sens })),
+                    categories
+                );
+
+                // Map results back to rows
+                const resultArray = Array.isArray(results) ? results : [results];
+                batch.forEach(({ tr }, j) => {
+                    if (resultArray[j]) {
+                        displaySuggestion(tr, resultArray[j], categories);
+                    } else {
+                        tr.querySelector('.dq-suggestion').innerHTML = '<span class="dq-sugg-error">Pas de réponse</span>';
+                    }
+                });
+            } catch (e) {
+                // Fallback: try individually for this batch
+                for (const { tr, row } of batch) {
+                    await suggestForRow(tr, row, categories);
+                    await new Promise(r => setTimeout(r, 500));
+                }
+            }
+
+            processed += batch.length;
+
+            // Small delay between batches to avoid rate limits
+            if (b + BATCH_SIZE < pending.length) {
+                await new Promise(r => setTimeout(r, 800));
+            }
         }
     }
 
@@ -1979,18 +2111,12 @@ Réponds UNIQUEMENT en JSON valide (pas de markdown) :
             sel.addEventListener('change', updateBulkBtn);
         });
 
-        // Bulk suggest all via Claude API
+        // Bulk suggest all via Claude API (batched)
         suggestBtn.onclick = async () => {
             if (!getDqApiKey()) return;
             suggestBtn.disabled = true;
-            suggestBtn.textContent = 'Analyse en cours...';
             const trs = tbody.querySelectorAll('tr');
-            for (let i = 0; i < trs.length; i++) {
-                const tr = trs[i];
-                if (tr.querySelector('.dq-empty')) continue;
-                if (tr.classList.contains('dq-row-confirmed')) continue;
-                await suggestForRow(tr, rows[i], categories);
-            }
+            await suggestBatch([...trs], rows, categories, suggestBtn);
             suggestBtn.textContent = 'Suggérer tout (IA)';
             suggestBtn.disabled = !getDqApiKey();
         };
