@@ -384,11 +384,18 @@
             <div class="dq-header">
                 <h2>Data Quality — Transactions à reclasser</h2>
                 <p class="dq-subtitle">Reclassez les décaissements « DIVERS » et les encaissements « Autres revenus » pour améliorer la qualité de votre analyse.</p>
-                <div class="dq-filter-bar">
-                    <label for="dq-filter-month">Filtrer par mois :</label>
-                    <select id="dq-filter-month" class="select-filter">
-                        <option value="">Tous les mois</option>
-                    </select>
+                <div class="dq-controls-bar">
+                    <div class="dq-filter-bar">
+                        <label for="dq-filter-month">Filtrer par mois :</label>
+                        <select id="dq-filter-month" class="select-filter">
+                            <option value="">Tous les mois</option>
+                        </select>
+                    </div>
+                    <div class="dq-api-bar">
+                        <label for="dq-api-key">Clé API Claude :</label>
+                        <input type="password" id="dq-api-key" class="dq-api-input" placeholder="sk-ant-..." autocomplete="off" />
+                        <span class="dq-api-status" id="dq-api-status"></span>
+                    </div>
                 </div>
             </div>
 
@@ -396,7 +403,10 @@
             <div class="dq-section">
                 <div class="dq-section-header">
                     <h3>Décaissements — DIVERS <span class="dq-count" id="dq-count-divers">0</span></h3>
-                    <button class="dq-btn-bulk" id="dq-bulk-divers" disabled>Appliquer tout</button>
+                    <div class="dq-section-actions">
+                        <button class="dq-btn-suggest-all" id="dq-suggest-divers" disabled>Suggérer tout (IA)</button>
+                        <button class="dq-btn-bulk" id="dq-bulk-divers" disabled>Appliquer tout</button>
+                    </div>
                 </div>
                 <div class="table-wrapper">
                     <table class="data-table dq-table">
@@ -405,7 +415,8 @@
                                 <th>Date</th>
                                 <th class="dq-th-libelle">Libellé</th>
                                 <th class="text-right">Montant</th>
-                                <th>Nouvelle catégorie</th>
+                                <th>Suggestion IA</th>
+                                <th>Catégorie</th>
                             </tr>
                         </thead>
                         <tbody id="dq-body-divers"></tbody>
@@ -417,7 +428,10 @@
             <div class="dq-section">
                 <div class="dq-section-header">
                     <h3>Encaissements — Autres revenus <span class="dq-count" id="dq-count-autres">0</span></h3>
-                    <button class="dq-btn-bulk" id="dq-bulk-autres" disabled>Appliquer tout</button>
+                    <div class="dq-section-actions">
+                        <button class="dq-btn-suggest-all" id="dq-suggest-autres" disabled>Suggérer tout (IA)</button>
+                        <button class="dq-btn-bulk" id="dq-bulk-autres" disabled>Appliquer tout</button>
+                    </div>
                 </div>
                 <div class="table-wrapper">
                     <table class="data-table dq-table">
@@ -426,7 +440,8 @@
                                 <th>Date</th>
                                 <th class="dq-th-libelle">Libellé</th>
                                 <th class="text-right">Montant</th>
-                                <th>Nouvelle catégorie</th>
+                                <th>Suggestion IA</th>
+                                <th>Catégorie</th>
                             </tr>
                         </thead>
                         <tbody id="dq-body-autres"></tbody>

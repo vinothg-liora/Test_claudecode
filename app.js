@@ -1803,6 +1803,123 @@
         });
     }
 
+    // ── Claude API for category suggestion ──
+    function getDqApiKey() {
+        return ($('#dq-api-key') || {}).value || '';
+    }
+
+    // Persist API key in IndexedDB
+    (async function loadApiKey() {
+        try {
+            const key = await idbGet('liora_api_key');
+            if (key) $('#dq-api-key').value = key;
+        } catch {}
+    })();
+    $('#dq-api-key').addEventListener('change', async () => {
+        try { await idbSet('liora_api_key', getDqApiKey()); } catch {}
+        updateSuggestButtons();
+    });
+    $('#dq-api-key').addEventListener('input', updateSuggestButtons);
+
+    function updateSuggestButtons() {
+        const hasKey = getDqApiKey().length > 10;
+        const statusEl = $('#dq-api-status');
+        statusEl.textContent = hasKey ? 'Connecté' : '';
+        statusEl.className = 'dq-api-status' + (hasKey ? ' dq-api-ok' : '');
+        document.querySelectorAll('.dq-btn-suggest-all').forEach(btn => {
+            btn.disabled = !hasKey;
+        });
+    }
+
+    async function callClaudeForCategory(libelle, montant, sens, categories) {
+        const apiKey = getDqApiKey();
+        if (!apiKey) throw new Error('Clé API manquante');
+
+        const catList = categories.join(', ');
+        const resp = await fetch('https://api.anthropic.com/v1/messages', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'x-api-key': apiKey,
+                'anthropic-version': '2023-06-01',
+                'anthropic-dangerous-direct-browser-access': 'true',
+            },
+            body: JSON.stringify({
+                model: 'claude-sonnet-4-20250514',
+                max_tokens: 200,
+                messages: [{
+                    role: 'user',
+                    content: `Tu es un expert comptable français. Classe cette transaction bancaire dans une des catégories proposées.
+
+Transaction :
+- Libellé : "${libelle}"
+- Montant : ${montant} €
+- Sens : ${sens}
+
+Catégories possibles : ${catList}
+
+Réponds UNIQUEMENT en JSON valide (pas de markdown) :
+{"categorie": "...", "confiance": 85, "raison": "explication courte"}
+
+- "categorie" doit être EXACTEMENT une des catégories de la liste.
+- "confiance" est un entier de 0 à 100.
+- "raison" est une phrase courte en français.`
+                }]
+            })
+        });
+
+        if (!resp.ok) {
+            const errBody = await resp.text();
+            throw new Error(`API ${resp.status}: ${errBody}`);
+        }
+
+        const data = await resp.json();
+        const text = data.content[0].text.trim();
+        return JSON.parse(text);
+    }
+
+    async function suggestForRow(tr, row, categories) {
+        const idx = parseInt(tr.querySelector('.dq-select').dataset.idx);
+        const suggCell = tr.querySelector('.dq-suggestion');
+        suggCell.innerHTML = '<span class="dq-loading">Analyse...</span>';
+
+        try {
+            const result = await callClaudeForCategory(row.libelle, row.montant, row.sens, categories);
+            const conf = result.confiance || 0;
+            const confClass = conf >= 80 ? 'high' : conf >= 50 ? 'med' : 'low';
+
+            suggCell.innerHTML = `
+                <div class="dq-sugg-result">
+                    <div class="dq-sugg-cat">${escapeHtml(result.categorie)}</div>
+                    <div class="dq-sugg-conf dq-conf-${confClass}">${conf}%</div>
+                    <div class="dq-sugg-reason">${escapeHtml(result.raison)}</div>
+                    <div class="dq-sugg-actions">
+                        <button class="dq-btn-confirm" data-cat="${escapeHtml(result.categorie)}" title="Confirmer">Confirmer</button>
+                        <button class="dq-btn-edit" title="Modifier">Modifier</button>
+                    </div>
+                </div>
+            `;
+
+            // Wire confirm button — sets dropdown and marks row
+            suggCell.querySelector('.dq-btn-confirm').addEventListener('click', () => {
+                const sel = tr.querySelector('.dq-select');
+                sel.value = result.categorie;
+                sel.dispatchEvent(new Event('change'));
+                tr.classList.add('dq-row-confirmed');
+                suggCell.querySelector('.dq-sugg-actions').innerHTML = '<span class="dq-confirmed-badge">Confirmé</span>';
+            });
+
+            // Wire edit button — just focuses the dropdown
+            suggCell.querySelector('.dq-btn-edit').addEventListener('click', () => {
+                const sel = tr.querySelector('.dq-select');
+                sel.focus();
+            });
+
+        } catch (e) {
+            suggCell.innerHTML = `<span class="dq-sugg-error" title="${escapeHtml(e.message)}">Erreur</span>`;
+        }
+    }
+
     function renderDataQuality() {
         const allDivers = rawData.filter(r => r.sens === 'Décaissement' && r.categorie === 'DIVERS');
         const allAutres = rawData.filter(r => r.sens === 'Encaissement' && r.categorie === 'Autres revenus');
@@ -1818,17 +1935,19 @@
         $('#dq-count-divers').textContent = diversRows.length;
         $('#dq-count-autres').textContent = autresRows.length;
 
-        renderDqTable('dq-body-divers', diversRows, DEC_CATEGORIES, 'dq-bulk-divers');
-        renderDqTable('dq-body-autres', autresRows, ENC_CATEGORIES, 'dq-bulk-autres');
+        renderDqTable('dq-body-divers', diversRows, DEC_CATEGORIES, 'dq-bulk-divers', 'dq-suggest-divers');
+        renderDqTable('dq-body-autres', autresRows, ENC_CATEGORIES, 'dq-bulk-autres', 'dq-suggest-autres');
+        updateSuggestButtons();
     }
 
     $('#dq-filter-month').addEventListener('change', renderDataQuality);
 
-    function renderDqTable(tbodyId, rows, categories, bulkBtnId) {
+    function renderDqTable(tbodyId, rows, categories, bulkBtnId, suggestBtnId) {
         const tbody = document.getElementById(tbodyId);
         const bulkBtn = document.getElementById(bulkBtnId);
+        const suggestBtn = document.getElementById(suggestBtnId);
         if (rows.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="4" class="dq-empty">Aucune transaction à reclasser.</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="5" class="dq-empty">Aucune transaction à reclasser.</td></tr>`;
             bulkBtn.disabled = true;
             return;
         }
@@ -1843,6 +1962,7 @@
                 <td>${escapeHtml(row.dateStr || '')}</td>
                 <td class="dq-cell-libelle">${escapeHtml(row.libelle)}</td>
                 <td class="text-right" style="white-space:nowrap">${formatCurrency(row.montant)}</td>
+                <td class="dq-suggestion"></td>
                 <td><select class="dq-select" data-idx="${idx}"><option value="">— Choisir —</option>${options}</select></td>
             `;
             tbody.appendChild(tr);
@@ -1858,6 +1978,23 @@
             sel.addEventListener('change', updateBulkBtn);
         });
 
+        // Bulk suggest all via Claude API
+        suggestBtn.onclick = async () => {
+            if (!getDqApiKey()) return;
+            suggestBtn.disabled = true;
+            suggestBtn.textContent = 'Analyse en cours...';
+            const trs = tbody.querySelectorAll('tr');
+            for (let i = 0; i < trs.length; i++) {
+                const tr = trs[i];
+                if (tr.querySelector('.dq-empty')) continue;
+                if (tr.classList.contains('dq-row-confirmed')) continue;
+                await suggestForRow(tr, rows[i], categories);
+            }
+            suggestBtn.textContent = 'Suggérer tout (IA)';
+            suggestBtn.disabled = !getDqApiKey();
+        };
+
+        // Bulk apply all selected categories
         bulkBtn.onclick = async () => {
             const selects = tbody.querySelectorAll('.dq-select');
             const toApply = [];
