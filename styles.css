@@ -1748,3 +1748,165 @@ body::before {
     color: var(--text-primary);
     border-color: var(--text-muted);
 }
+
+/* ============================
+   Fichiers Tab
+   ============================ */
+
+.nav-brand-link {
+    cursor: pointer;
+    transition: opacity 0.15s;
+}
+.nav-brand-link:hover {
+    opacity: 0.8;
+}
+
+.ft-header {
+    margin-bottom: 1.5rem;
+}
+.ft-header h2 {
+    color: var(--text-primary);
+    margin: 0 0 0.3rem 0;
+}
+.ft-subtitle {
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    margin: 0 0 0.5rem 0;
+}
+.ft-section {
+    margin-bottom: 2rem;
+    padding-bottom: 1.5rem;
+    border-bottom: 1px solid var(--border-color);
+}
+.ft-section:last-child {
+    border-bottom: none;
+}
+.ft-section h3 {
+    color: var(--text-primary);
+    font-size: 1rem;
+    margin: 0 0 0.75rem 0;
+}
+.ft-section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 0.75rem;
+}
+.ft-section-header h3 {
+    margin: 0;
+}
+
+/* Upload zone */
+.ft-upload-zone {
+    border: 2px dashed var(--border-color);
+    border-radius: var(--radius-md);
+    padding: 2rem;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    background: var(--bg-card);
+}
+.ft-upload-zone:hover,
+.ft-upload-zone.dragover {
+    border-color: var(--accent);
+    background: rgba(99,102,241,0.05);
+}
+.ft-upload-icon {
+    color: var(--text-muted);
+    margin-bottom: 0.5rem;
+}
+.ft-upload-text {
+    color: var(--text-primary);
+    font-weight: 500;
+    margin: 0 0 0.3rem 0;
+}
+.ft-upload-formats {
+    color: var(--text-muted);
+    font-size: 0.8rem;
+    margin: 0;
+}
+
+/* File list */
+.ft-file-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+.ft-empty {
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    font-style: italic;
+}
+.ft-file-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    padding: 0.75rem 1rem;
+    transition: border-color 0.15s;
+}
+.ft-file-item:hover {
+    border-color: var(--accent-bg);
+}
+.ft-file-info {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    color: var(--text-primary);
+    min-width: 0;
+}
+.ft-file-info svg {
+    color: var(--accent);
+    flex-shrink: 0;
+}
+.ft-file-name {
+    font-weight: 600;
+    font-size: 0.85rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.ft-file-meta {
+    color: var(--text-muted);
+    font-size: 0.78rem;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+.ft-btn-delete {
+    background: transparent;
+    border: 1px solid transparent;
+    color: var(--text-muted);
+    border-radius: var(--radius-sm);
+    padding: 0.35rem;
+    cursor: pointer;
+    transition: all 0.15s;
+    flex-shrink: 0;
+}
+.ft-btn-delete:hover {
+    color: #f87171;
+    border-color: rgba(248,113,113,0.3);
+    background: rgba(248,113,113,0.08);
+}
+
+/* API key row */
+.ft-api-row {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+.ft-api-input {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    padding: 0.5rem 0.75rem;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.8rem;
+    width: 320px;
+}
+.ft-api-input:focus {
+    border-color: var(--accent);
+    outline: none;
+}

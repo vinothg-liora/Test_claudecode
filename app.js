@@ -1685,55 +1685,113 @@
         return (...args) => { clearTimeout(timer); timer = setTimeout(() => fn(...args), ms); };
     }
 
-    // ── New File Button (keeps historical data) ──
-    $('#btn-new-file').addEventListener('click', () => {
-        currentPage = 1;
-        fileInput.value = '';
-        $('#file-info').classList.add('hidden');
-        window._selectedFile = null;
-        showScreen('upload');
+    // ── Logo click = Home ──
+    $('#nav-logo-home').addEventListener('click', () => {
+        $$('.nav-tab').forEach(b => b.classList.remove('active'));
+        const dashTab = document.querySelector('.nav-tab[data-tab="dashboard"]');
+        if (dashTab) dashTab.classList.add('active');
+        $$('.tab-content').forEach(tc => tc.classList.remove('active'));
+        const target = document.getElementById('tab-dashboard');
+        if (target) target.classList.add('active');
     });
 
-    // ── Clear All History Button ──
-    $('#btn-clear-history').addEventListener('click', async () => {
+    // ── Export ──
+    $('#btn-export').addEventListener('click', () => { window.print(); });
+
+    // ── Fichiers Tab: Upload zone ──
+    const ftFileInput = document.getElementById('ft-file-input');
+    const ftUploadZone = document.getElementById('ft-upload-zone');
+
+    ftUploadZone.addEventListener('click', () => ftFileInput.click());
+    ftUploadZone.addEventListener('dragover', (e) => { e.preventDefault(); ftUploadZone.classList.add('dragover'); });
+    ftUploadZone.addEventListener('dragleave', () => ftUploadZone.classList.remove('dragover'));
+    ftUploadZone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        ftUploadZone.classList.remove('dragover');
+        if (e.dataTransfer.files.length > 0) handleFtFile(e.dataTransfer.files[0]);
+    });
+    ftFileInput.addEventListener('change', () => {
+        if (ftFileInput.files.length > 0) handleFtFile(ftFileInput.files[0]);
+    });
+
+    function handleFtFile(file) {
+        window._selectedFile = file;
+        const sizeKB = (file.size / 1024).toFixed(1);
+        $('#ft-file-name').textContent = file.name;
+        $('#ft-file-size').textContent = `(${sizeKB} KB)`;
+        $('#ft-file-info').classList.remove('hidden');
+    }
+
+    $('#ft-analyze-btn').addEventListener('click', () => {
+        if (!window._selectedFile) return;
+        showScreen('loading');
+        setTimeout(() => processFile(window._selectedFile), 500);
+    });
+
+    // ── Clear All History ──
+    $('#ft-clear-all').addEventListener('click', async () => {
         if (!confirm('Supprimer tout l\'historique des données importées ?')) return;
         await clearAllHistory();
         rawData = [];
         filteredData = [];
         currentPage = 1;
         Object.keys(charts).forEach(destroyChart);
-        fileInput.value = '';
-        $('#file-info').classList.add('hidden');
-        window._selectedFile = null;
         await renderFileHistory();
-        showScreen('upload');
     });
 
-    // ── Export ──
-    $('#btn-export').addEventListener('click', () => { window.print(); });
+    // ── Delete single file from history ──
+    async function deleteFileFromHistory(index) {
+        const history = await getFileHistory();
+        if (index < 0 || index >= history.length) return;
+        const fileName = history[index].name;
+        if (!confirm(`Supprimer « ${fileName} » de l'historique ?`)) return;
 
-    // ── File History Rendering ──
+        // Remove file entry
+        history.splice(index, 1);
+        await idbSet(STORAGE_FILES_KEY, history);
+
+        // Note: raw data is merged, we can't perfectly un-merge.
+        // But we can reload from remaining data if all files are cleared.
+        if (history.length === 0) {
+            await idbDelete(STORAGE_DATA_KEY);
+            rawData = [];
+            filteredData = [];
+            currentPage = 1;
+            Object.keys(charts).forEach(destroyChart);
+        }
+        await renderFileHistory();
+    }
+
+    // ── File History Rendering (in Fichiers tab) ──
     async function renderFileHistory() {
-        const container = $('#file-history');
+        const container = document.getElementById('ft-file-history');
         if (!container) return;
         const history = await getFileHistory();
         if (history.length === 0) {
-            container.classList.add('hidden');
+            container.innerHTML = '<p class="ft-empty">Aucun fichier importé.</p>';
             return;
         }
-        container.classList.remove('hidden');
-        let html = '<h4 class="history-title">Fichiers importés</h4><div class="history-list">';
+        let html = '';
         history.forEach((f, i) => {
             const d = new Date(f.date);
             const dateStr = d.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-            html += `<div class="history-item">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-                <span class="history-name">${escapeHtml(f.name)}</span>
-                <span class="history-meta">${f.rowCount} lignes — ${dateStr}</span>
+            html += `<div class="ft-file-item">
+                <div class="ft-file-info">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                    <span class="ft-file-name">${escapeHtml(f.name)}</span>
+                    <span class="ft-file-meta">${f.rowCount} lignes — ${dateStr}</span>
+                </div>
+                <button class="ft-btn-delete" data-index="${i}" title="Supprimer ce fichier">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                </button>
             </div>`;
         });
-        html += '</div>';
         container.innerHTML = html;
+
+        // Wire delete buttons
+        container.querySelectorAll('.ft-btn-delete').forEach(btn => {
+            btn.addEventListener('click', () => deleteFileFromHistory(parseInt(btn.dataset.index)));
+        });
     }
 
     // ── Auto-load from IndexedDB on startup ──
@@ -1765,6 +1823,7 @@
             if (target) target.classList.add('active');
             if (btn.dataset.tab === 'dataquality') renderDataQuality();
             if (btn.dataset.tab === 'simulation') renderSimulationTab();
+            if (btn.dataset.tab === 'fichiers') renderFileHistory();
         });
     });
 

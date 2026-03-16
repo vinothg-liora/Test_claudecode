@@ -83,7 +83,7 @@
     <!-- Dashboard Screen -->
     <div id="dashboard-screen" class="screen">
         <nav class="navbar navbar-dash">
-            <div class="nav-brand">
+            <div class="nav-brand nav-brand-link" id="nav-logo-home" title="Retour au tableau de bord">
                 <div class="logo-icon">
                     <img src="Liora_Logo_Orange_alpha.png" alt="Liora" style="height: 32px;">
                 </div>
@@ -93,19 +93,12 @@
                 <button class="nav-tab active" data-tab="dashboard">Tableau de bord</button>
                 <button class="nav-tab" data-tab="dataquality">Data Quality</button>
                 <button class="nav-tab" data-tab="simulation">Simulation</button>
+                <button class="nav-tab" data-tab="fichiers">Fichiers</button>
             </div>
             <div class="nav-actions">
-                <button class="btn btn-ghost" id="btn-new-file">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-                    Nouveau fichier
-                </button>
                 <button class="btn btn-ghost" id="btn-export">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                     Exporter PDF
-                </button>
-                <button class="btn btn-ghost btn-danger" id="btn-clear-history">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
-                    Effacer l'historique
                 </button>
             </div>
         </nav>
@@ -115,9 +108,6 @@
         <div class="dashboard-content">
             <!-- Active cross-filter chips -->
             <div id="active-filters" class="active-filters hidden"></div>
-
-            <!-- File history -->
-            <div id="file-history" class="file-history hidden"></div>
 
             <!-- Date filter -->
             <div class="date-filter-bar">
@@ -385,18 +375,11 @@
             <div class="dq-header">
                 <h2>Data Quality — Transactions à reclasser</h2>
                 <p class="dq-subtitle">Reclassez les décaissements « DIVERS » et les encaissements « Autres revenus » pour améliorer la qualité de votre analyse.</p>
-                <div class="dq-controls-bar">
-                    <div class="dq-filter-bar">
-                        <label for="dq-filter-month">Filtrer par mois :</label>
-                        <select id="dq-filter-month" class="select-filter">
-                            <option value="">Tous les mois</option>
-                        </select>
-                    </div>
-                    <div class="dq-api-bar">
-                        <label for="dq-api-key">Clé API Claude :</label>
-                        <input type="password" id="dq-api-key" class="dq-api-input" placeholder="sk-ant-..." autocomplete="off" />
-                        <span class="dq-api-status" id="dq-api-status"></span>
-                    </div>
+                <div class="dq-filter-bar">
+                    <label for="dq-filter-month">Filtrer par mois :</label>
+                    <select id="dq-filter-month" class="select-filter">
+                        <option value="">Tous les mois</option>
+                    </select>
                 </div>
             </div>
 
@@ -568,6 +551,65 @@
 
         </div>
         </div><!-- /tab-simulation -->
+
+        <!-- TAB: Fichiers -->
+        <div class="tab-content" id="tab-fichiers">
+        <div class="dashboard-content">
+            <div class="ft-header">
+                <h2>Gestion des fichiers & paramètres</h2>
+                <p class="ft-subtitle">Importez vos données, gérez l'historique des fichiers et configurez votre clé API.</p>
+            </div>
+
+            <!-- Import section -->
+            <div class="ft-section">
+                <h3>Importer un fichier</h3>
+                <div class="ft-upload-zone" id="ft-upload-zone">
+                    <div class="ft-upload-icon">
+                        <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                    </div>
+                    <p class="ft-upload-text">Glissez-déposez ou cliquez pour importer</p>
+                    <p class="ft-upload-formats">Formats : .csv, .xlsx, .xls</p>
+                    <input type="file" id="ft-file-input" accept=".csv,.xlsx,.xls" hidden>
+                </div>
+                <div id="ft-file-info" class="file-info hidden" style="margin-top:1rem">
+                    <div class="file-badge">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                        <span id="ft-file-name"></span>
+                        <span id="ft-file-size"></span>
+                    </div>
+                    <button class="btn btn-primary" id="ft-analyze-btn">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                        Lancer l'analyse
+                    </button>
+                </div>
+            </div>
+
+            <!-- File history section -->
+            <div class="ft-section">
+                <div class="ft-section-header">
+                    <h3>Fichiers importés</h3>
+                    <button class="btn btn-ghost btn-danger btn-sm" id="ft-clear-all">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                        Tout effacer
+                    </button>
+                </div>
+                <div id="ft-file-history" class="ft-file-list">
+                    <p class="ft-empty">Aucun fichier importé.</p>
+                </div>
+            </div>
+
+            <!-- API Key section -->
+            <div class="ft-section">
+                <h3>Clé API Claude (IA)</h3>
+                <p class="ft-subtitle">Utilisée pour les suggestions de catégorisation automatique dans l'onglet Data Quality.</p>
+                <div class="ft-api-row">
+                    <input type="password" id="dq-api-key" class="ft-api-input" placeholder="sk-ant-..." autocomplete="off" />
+                    <span class="dq-api-status" id="dq-api-status"></span>
+                </div>
+            </div>
+
+        </div>
+        </div><!-- /tab-fichiers -->
 
     </div>
 
