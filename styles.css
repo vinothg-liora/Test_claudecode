@@ -1910,3 +1910,13 @@ body::before {
     border-color: var(--accent);
     outline: none;
 }
+
+/* Learned suggestion styling */
+.dq-sugg-learned {
+    border-left: 3px solid var(--accent);
+    padding-left: 0.5rem;
+}
+.dq-sugg-learned .dq-sugg-reason {
+    font-style: italic;
+    opacity: 0.8;
+}

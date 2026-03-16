@@ -108,6 +108,44 @@
         await idbDelete(STORAGE_FILES_KEY);
     }
 
+    // ── Learned Categories Store ──
+    // Maps normalized libellé → { category, sens, count, date }
+    const STORAGE_LEARNED_KEY = 'liora_learned_categories';
+    let _learnedCache = {}; // in-memory cache, loaded at startup
+
+    async function loadLearnedCategories() {
+        try { _learnedCache = (await idbGet(STORAGE_LEARNED_KEY)) || {}; } catch { _learnedCache = {}; }
+    }
+
+    async function learnCategoryBatch(entries) {
+        for (const { libelle, category, sens } of entries) {
+            const key = normUpper(libelle);
+            _learnedCache[key] = { category, sens, count: (_learnedCache[key]?.count || 0) + 1, date: Date.now() };
+        }
+        await idbSet(STORAGE_LEARNED_KEY, _learnedCache);
+    }
+
+    function findLearnedCategory(libelleNorm, sens) {
+        // Exact match
+        if (_learnedCache[libelleNorm] && _learnedCache[libelleNorm].sens === sens) {
+            return _learnedCache[libelleNorm].category;
+        }
+        // Partial match: learned key contained in libellé or vice versa
+        let bestMatch = null;
+        let bestLen = 0;
+        for (const [key, val] of Object.entries(_learnedCache)) {
+            if (val.sens !== sens) continue;
+            if (libelleNorm.includes(key) || key.includes(libelleNorm)) {
+                const matchLen = Math.min(key.length, libelleNorm.length);
+                if (matchLen > bestLen) {
+                    bestLen = matchLen;
+                    bestMatch = val.category;
+                }
+            }
+        }
+        return bestMatch;
+    }
+
     // Migrate from localStorage to IndexedDB (one-time)
     async function migrateFromLocalStorage() {
         try {
@@ -420,6 +458,14 @@
                 return;
             }
 
+            // Check learned categories (from previous manual categorizations)
+            const learnedCat = findLearnedCategory(libNorm, row.sens);
+            if (learnedCat) {
+                row.categorie = learnedCat;
+                row.ruleHit = 'Apprentissage automatique';
+                return;
+            }
+
             if (row.sens === 'Encaissement') {
                 const [cat, rule] = categoriseEnc(libNorm, tiersNorm);
                 row.categorie = cat;
@@ -710,7 +756,8 @@
 
             // Run categorization on ALL data (re-run ensures consistency)
             $('#loader-status').textContent = 'Catégorisation des transactions...';
-            setTimeout(() => {
+            setTimeout(async () => {
+                await loadLearnedCategories();
                 categorizeAll(rawData);
 
                 // Save merged data + file history
@@ -1797,6 +1844,7 @@
     // ── Auto-load from IndexedDB on startup ──
     (async function autoLoad() {
         await migrateFromLocalStorage();
+        await loadLearnedCategories();
         const stored = await loadFromStorage();
         if (stored.length > 0) {
             rawData = stored;
@@ -1836,9 +1884,11 @@
         'Frais généraux & services', 'Note de frais', 'Prévoyance / Mutuelle', 'Ticket restaurant',
         'SaaS/IT', 'Marketing & Acquisition', 'URSSAF', 'Partenariat académique',
         'Formateurs / Freelances', 'Remboursement', 'Salaires', 'Loyers & charges', 'Autres impôts',
+        'DIVERS',
     ];
     const ENC_CATEGORIES = [
         'Interco', 'Alternance (OPCO)', 'CPF', 'Reconversion', 'B2B', 'B2C',
+        'Autres revenus',
     ];
 
     const MONTH_NAMES = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
@@ -2158,6 +2208,26 @@ Réponds UNIQUEMENT en JSON valide (pas de markdown), sous forme d'un tableau :
                 <td><select class="dq-select" data-idx="${idx}"><option value="">— Choisir —</option>${options}</select></td>
             `;
             tbody.appendChild(tr);
+
+            // Check for learned suggestion
+            const learnedCat = findLearnedCategory(normUpper(row.libelle), row.sens);
+            if (learnedCat && categories.includes(learnedCat)) {
+                const suggCell = tr.querySelector('.dq-suggestion');
+                suggCell.innerHTML = `<div class="dq-sugg-result dq-sugg-learned">
+                    <div class="dq-sugg-cat">${escapeHtml(learnedCat)}</div>
+                    <div class="dq-sugg-reason">Suggestion basée sur vos reclassements précédents</div>
+                    <div class="dq-sugg-actions">
+                        <button class="dq-btn-confirm" data-cat="${escapeHtml(learnedCat)}" title="Confirmer">Appliquer</button>
+                    </div>
+                </div>`;
+                suggCell.querySelector('.dq-btn-confirm').addEventListener('click', () => {
+                    const sel = tr.querySelector('.dq-select');
+                    sel.value = learnedCat;
+                    sel.dispatchEvent(new Event('change'));
+                    tr.classList.add('dq-row-confirmed');
+                    suggCell.querySelector('.dq-sugg-actions').innerHTML = '<span class="dq-confirmed-badge">Appliqué</span>';
+                });
+            }
         });
 
         function updateBulkBtn() {
@@ -2188,13 +2258,16 @@ Réponds UNIQUEMENT en JSON valide (pas de markdown), sous forme d'un tableau :
                 if (sel.value) toApply.push({ idx: parseInt(sel.dataset.idx), cat: sel.value });
             });
             if (toApply.length === 0) return;
+            const learnEntries = [];
             toApply.forEach(({ idx, cat }) => {
                 const row = rawData[idx];
                 if (!row) return;
                 row.categorie = cat;
                 row.manualCategory = cat;
                 row.ruleHit = 'DQ: Reclassement manuel';
+                learnEntries.push({ libelle: row.libelle, category: cat, sens: row.sens });
             });
+            await learnCategoryBatch(learnEntries);
             await saveToStorage();
             computeFilteredData();
             renderDataQuality();
