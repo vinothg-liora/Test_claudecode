@@ -1955,9 +1955,9 @@
             $$('.tab-content').forEach(tc => tc.classList.remove('active'));
             const target = document.getElementById('tab-' + btn.dataset.tab);
             if (target) target.classList.add('active');
-            if (btn.dataset.tab === 'dataquality') renderDataQuality();
+            if (btn.dataset.tab === 'dataquality') { renderDataQuality(); renderLearnedRules(); }
             if (btn.dataset.tab === 'simulation') renderSimulationTab();
-            if (btn.dataset.tab === 'fichiers') { renderFileHistory(); renderLearnedRules(); }
+            if (btn.dataset.tab === 'fichiers') renderFileHistory();
         });
     });
 
