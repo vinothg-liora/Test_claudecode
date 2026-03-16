@@ -1764,6 +1764,7 @@
             const target = document.getElementById('tab-' + btn.dataset.tab);
             if (target) target.classList.add('active');
             if (btn.dataset.tab === 'dataquality') renderDataQuality();
+            if (btn.dataset.tab === 'simulation') renderSimulationTab();
         });
     });
 
@@ -2016,6 +2017,576 @@ Réponds UNIQUEMENT en JSON valide (pas de markdown) :
         };
     }
 
+
+    // ══════════════════════════════════════════════
+    //  SIMULATION TAB
+    // ══════════════════════════════════════════════
+
+    let simActiveModel = 'recurring';
+    const SIM_MONTHS_AHEAD = 3;
+
+    // ── Helper: get sorted unique month keys from rawData ──
+    function getHistoricalMonths() {
+        const set = new Set();
+        rawData.forEach(r => { const k = getMonthKey(r); if (k) set.add(k); });
+        return [...set].sort();
+    }
+
+    function monthKeyToLabel(k) {
+        const [y, m] = k.split('-');
+        return MONTH_NAMES[parseInt(m) - 1] + ' ' + y;
+    }
+
+    function nextMonthKey(k) {
+        let [y, m] = k.split('-').map(Number);
+        m++;
+        if (m > 12) { m = 1; y++; }
+        return y + '-' + String(m).padStart(2, '0');
+    }
+
+    function getFutureMonthKeys(count) {
+        const months = getHistoricalMonths();
+        let last = months.length > 0 ? months[months.length - 1] : new Date().getFullYear() + '-' + String(new Date().getMonth() + 1).padStart(2, '0');
+        const result = [];
+        for (let i = 0; i < count; i++) {
+            last = nextMonthKey(last);
+            result.push(last);
+        }
+        return result;
+    }
+
+    // ── Aggregate historical monthly data by category ──
+    function getMonthlyByCat(sens) {
+        const map = {}; // { cat: { monthKey: total } }
+        rawData.forEach(r => {
+            if (r.sens !== sens) return;
+            const mk = getMonthKey(r);
+            if (!mk) return;
+            const cat = r.categorie || 'Autre';
+            if (!map[cat]) map[cat] = {};
+            map[cat][mk] = (map[cat][mk] || 0) + Math.abs(r.montant);
+        });
+        return map;
+    }
+
+    // ── MODEL 1: Recurring pattern (median by category) ──
+    function projectRecurring() {
+        const histMonths = getHistoricalMonths();
+        const futureKeys = getFutureMonthKeys(SIM_MONTHS_AHEAD);
+        const n = histMonths.length;
+        if (n === 0) return { futureKeys, enc: [], dec: [], encDetail: {}, decDetail: {} };
+
+        function medianByCat(sens) {
+            const catMap = getMonthlyByCat(sens);
+            const result = {};
+            for (const cat in catMap) {
+                const vals = histMonths.map(mk => catMap[cat][mk] || 0);
+                // Use last 6 months if available
+                const recent = vals.slice(-6);
+                // Filter out zero-only categories
+                if (recent.every(v => v === 0)) continue;
+                const sorted = [...recent].filter(v => v > 0).sort((a, b) => a - b);
+                if (sorted.length === 0) { result[cat] = 0; continue; }
+                const mid = Math.floor(sorted.length / 2);
+                result[cat] = sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+            }
+            return result;
+        }
+
+        const encMedians = medianByCat('Encaissement');
+        const decMedians = medianByCat('Décaissement');
+
+        const enc = futureKeys.map(() => Object.values(encMedians).reduce((s, v) => s + v, 0));
+        const dec = futureKeys.map(() => Object.values(decMedians).reduce((s, v) => s + v, 0));
+
+        return { futureKeys, enc, dec, encDetail: encMedians, decDetail: decMedians };
+    }
+
+    // ── MODEL 2: Weighted Moving Average ──
+    function projectWMA() {
+        const histMonths = getHistoricalMonths();
+        const futureKeys = getFutureMonthKeys(SIM_MONTHS_AHEAD);
+        const n = histMonths.length;
+        if (n === 0) return { futureKeys, enc: [], dec: [], encDetail: {}, decDetail: {} };
+
+        // Aggregate monthly totals
+        const monthlyEnc = {};
+        const monthlyDec = {};
+        rawData.forEach(r => {
+            const mk = getMonthKey(r);
+            if (!mk) return;
+            if (r.montant > 0) monthlyEnc[mk] = (monthlyEnc[mk] || 0) + r.montant;
+            else monthlyDec[mk] = (monthlyDec[mk] || 0) + Math.abs(r.montant);
+        });
+
+        function wma(series, window) {
+            const vals = histMonths.map(mk => series[mk] || 0);
+            const w = Math.min(window, vals.length);
+            const recent = vals.slice(-w);
+            // Weights: 1, 2, 3, ... w (more recent = more weight)
+            const totalWeight = w * (w + 1) / 2;
+            let sum = 0;
+            recent.forEach((v, i) => { sum += v * (i + 1); });
+            return sum / totalWeight;
+        }
+
+        // Also compute WMA per category for detail
+        function wmaByCat(sens) {
+            const catMap = getMonthlyByCat(sens);
+            const result = {};
+            for (const cat in catMap) {
+                const vals = histMonths.map(mk => catMap[cat][mk] || 0);
+                const w = Math.min(6, vals.length);
+                const recent = vals.slice(-w);
+                if (recent.every(v => v === 0)) continue;
+                const totalWeight = w * (w + 1) / 2;
+                let s = 0;
+                recent.forEach((v, i) => { s += v * (i + 1); });
+                result[cat] = s / totalWeight;
+            }
+            return result;
+        }
+
+        const encWma = wma(monthlyEnc, 6);
+        const decWma = wma(monthlyDec, 6);
+        const encDetail = wmaByCat('Encaissement');
+        const decDetail = wmaByCat('Décaissement');
+
+        // Apply slight trend: compute growth rate from last 3 vs previous 3
+        function trend(series) {
+            const vals = histMonths.map(mk => series[mk] || 0);
+            if (vals.length < 4) return 1;
+            const recent3 = vals.slice(-3).reduce((s, v) => s + v, 0) / 3;
+            const prev3 = vals.slice(-6, -3);
+            if (prev3.length === 0) return 1;
+            const prevAvg = prev3.reduce((s, v) => s + v, 0) / prev3.length;
+            if (prevAvg === 0) return 1;
+            const growth = recent3 / prevAvg;
+            // Cap between 0.8 and 1.2 to avoid wild projections
+            return Math.max(0.8, Math.min(1.2, growth));
+        }
+
+        const encTrend = trend(monthlyEnc);
+        const decTrend = trend(monthlyDec);
+
+        const enc = [];
+        const dec = [];
+        for (let i = 0; i < SIM_MONTHS_AHEAD; i++) {
+            enc.push(encWma * Math.pow(encTrend, i));
+            dec.push(decWma * Math.pow(decTrend, i));
+        }
+
+        return { futureKeys, enc, dec, encDetail, decDetail };
+    }
+
+    // ── Render projection ──
+    function renderSimProjection() {
+        const proj = simActiveModel === 'recurring' ? projectRecurring() : projectWMA();
+        const futureKeys = proj.futureKeys;
+
+        // Historical months for context (last 3)
+        const histMonths = getHistoricalMonths().slice(-3);
+        const monthlyEnc = {};
+        const monthlyDec = {};
+        rawData.forEach(r => {
+            const mk = getMonthKey(r);
+            if (!mk) return;
+            if (r.montant > 0) monthlyEnc[mk] = (monthlyEnc[mk] || 0) + r.montant;
+            else monthlyDec[mk] = (monthlyDec[mk] || 0) + Math.abs(r.montant);
+        });
+
+        const allKeys = [...histMonths, ...futureKeys];
+        const labels = allKeys.map(monthKeyToLabel);
+        const encVals = allKeys.map((k, i) => {
+            if (i < histMonths.length) return monthlyEnc[k] || 0;
+            return proj.enc[i - histMonths.length] || 0;
+        });
+        const decVals = allKeys.map((k, i) => {
+            if (i < histMonths.length) return monthlyDec[k] || 0;
+            return proj.dec[i - histMonths.length] || 0;
+        });
+        const netVals = encVals.map((e, i) => e - decVals[i]);
+
+        // KPIs
+        const totalEnc = proj.enc.reduce((s, v) => s + v, 0);
+        const totalDec = proj.dec.reduce((s, v) => s + v, 0);
+        $('#sim-proj-enc').textContent = formatCurrency(totalEnc);
+        $('#sim-proj-dec').textContent = formatCurrency(-totalDec);
+        $('#sim-proj-net').textContent = formatCurrency(totalEnc - totalDec);
+        $('#sim-proj-net').className = 'sim-kpi-value ' + (totalEnc - totalDec >= 0 ? 'sim-positive' : 'sim-negative');
+
+        // Chart
+        destroyChart('simProjection');
+        const ctx = $('#chart-sim-projection').getContext('2d');
+        const defaults = getChartDefaults();
+
+        const bgColors = allKeys.map((_, i) => i < histMonths.length ? 'rgba(99,102,241,0.6)' : 'rgba(99,102,241,0.25)');
+        const bgColorsDec = allKeys.map((_, i) => i < histMonths.length ? 'rgba(248,113,113,0.6)' : 'rgba(248,113,113,0.25)');
+        const borderDash = allKeys.map((_, i) => i < histMonths.length ? [] : [5, 5]);
+
+        charts.simProjection = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels,
+                datasets: [
+                    {
+                        label: 'Encaissements',
+                        data: encVals,
+                        backgroundColor: bgColors,
+                        borderColor: 'rgba(99,102,241,0.8)',
+                        borderWidth: 1,
+                        borderDash: undefined,
+                    },
+                    {
+                        label: 'Décaissements',
+                        data: decVals.map(v => -v),
+                        backgroundColor: bgColorsDec,
+                        borderColor: 'rgba(248,113,113,0.8)',
+                        borderWidth: 1,
+                    },
+                    {
+                        label: 'Solde net',
+                        data: netVals,
+                        type: 'line',
+                        borderColor: '#facc15',
+                        backgroundColor: 'transparent',
+                        borderWidth: 2,
+                        pointRadius: 4,
+                        pointBackgroundColor: '#facc15',
+                        segment: {
+                            borderDash: ctx2 => ctx2.p0DataIndex >= histMonths.length - 1 ? [5, 5] : undefined,
+                        },
+                    },
+                ]
+            },
+            options: {
+                ...defaults,
+                plugins: {
+                    ...defaults.plugins,
+                    annotation: {
+                        annotations: {
+                            projLine: {
+                                type: 'line',
+                                xMin: histMonths.length - 0.5,
+                                xMax: histMonths.length - 0.5,
+                                borderColor: 'rgba(255,255,255,0.2)',
+                                borderWidth: 1,
+                                borderDash: [4, 4],
+                                label: {
+                                    display: true,
+                                    content: 'Projection',
+                                    position: 'start',
+                                    color: 'rgba(255,255,255,0.5)',
+                                    font: { size: 10 },
+                                }
+                            }
+                        }
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: (ctx) => ctx.dataset.label + ': ' + formatCurrency(ctx.parsed.y)
+                        }
+                    }
+                },
+                scales: {
+                    x: { ticks: { color: 'rgba(255,255,255,0.6)', font: { size: 11 } }, grid: { color: 'rgba(255,255,255,0.05)' } },
+                    y: { ticks: { color: 'rgba(255,255,255,0.6)', callback: v => formatCurrency(v) }, grid: { color: 'rgba(255,255,255,0.05)' } }
+                }
+            }
+        });
+
+        // Detail table
+        const thead = document.getElementById('sim-proj-thead');
+        const tbody = document.getElementById('sim-proj-tbody');
+        thead.innerHTML = `<tr><th>Catégorie</th>${futureKeys.map(k => `<th class="text-right">${monthKeyToLabel(k)}</th>`).join('')}<th class="text-right">Total</th></tr>`;
+
+        let rows = '';
+        // Enc detail
+        rows += `<tr class="sim-section-row"><td colspan="${futureKeys.length + 2}">Encaissements</td></tr>`;
+        for (const cat in proj.encDetail) {
+            const val = proj.encDetail[cat];
+            if (val === 0) continue;
+            rows += `<tr><td>${escapeHtml(cat)}</td>`;
+            let total = 0;
+            futureKeys.forEach((_, i) => {
+                const v = simActiveModel === 'wma' ? val * Math.pow(1, i) : val;
+                total += v;
+                rows += `<td class="text-right">${formatCurrency(v)}</td>`;
+            });
+            rows += `<td class="text-right sim-total-cell">${formatCurrency(total)}</td></tr>`;
+        }
+        rows += `<tr class="sim-subtotal-row"><td>Total Encaissements</td>${futureKeys.map((_, i) => `<td class="text-right">${formatCurrency(proj.enc[i])}</td>`).join('')}<td class="text-right">${formatCurrency(totalEnc)}</td></tr>`;
+
+        // Dec detail
+        rows += `<tr class="sim-section-row"><td colspan="${futureKeys.length + 2}">Décaissements</td></tr>`;
+        for (const cat in proj.decDetail) {
+            const val = proj.decDetail[cat];
+            if (val === 0) continue;
+            rows += `<tr><td>${escapeHtml(cat)}</td>`;
+            let total = 0;
+            futureKeys.forEach((_, i) => {
+                const v = simActiveModel === 'wma' ? val * Math.pow(1, i) : val;
+                total += v;
+                rows += `<td class="text-right">${formatCurrency(-v)}</td>`;
+            });
+            rows += `<td class="text-right sim-total-cell">${formatCurrency(-total)}</td></tr>`;
+        }
+        rows += `<tr class="sim-subtotal-row"><td>Total Décaissements</td>${futureKeys.map((_, i) => `<td class="text-right">${formatCurrency(-proj.dec[i])}</td>`).join('')}<td class="text-right">${formatCurrency(-totalDec)}</td></tr>`;
+
+        // Net
+        rows += `<tr class="sim-net-row"><td>Solde net</td>${futureKeys.map((_, i) => {
+            const net = proj.enc[i] - proj.dec[i];
+            return `<td class="text-right ${net >= 0 ? 'sim-positive' : 'sim-negative'}">${formatCurrency(net)}</td>`;
+        }).join('')}<td class="text-right ${totalEnc - totalDec >= 0 ? 'sim-positive' : 'sim-negative'}">${formatCurrency(totalEnc - totalDec)}</td></tr>`;
+
+        tbody.innerHTML = rows;
+    }
+
+    // ── Model toggle ──
+    document.querySelectorAll('.sim-model-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('.sim-model-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            simActiveModel = btn.dataset.model;
+            renderSimProjection();
+        });
+    });
+
+    // ══════════════════════════════════════════════
+    //  SIMULATION PANEL 2: Manual Inputs
+    // ══════════════════════════════════════════════
+
+    const SIM_ENC_CATS = ['B2B', 'B2C', 'Alternance (OPCO)', 'CPF', 'Reconversion', 'Autres revenus'];
+    const SIM_DEC_CATS = [
+        'Salaires', 'URSSAF', 'Formateurs / Freelances', 'SaaS/IT',
+        'Frais généraux & services', 'Note de frais', 'Marketing & Acquisition',
+        'Prévoyance / Mutuelle', 'Ticket restaurant', 'Loyers & charges',
+        'Banques/Dettes', 'Autres impôts',
+    ];
+    const SIM_ENC_DELAYS = { 'B2B': 45, 'B2C': 0, 'Alternance (OPCO)': 60, 'CPF': 30, 'Reconversion': 30, 'Autres revenus': 0 };
+
+    function buildSimInputs() {
+        // Pre-fill from historical averages
+        const histMonths = getHistoricalMonths();
+        const n = Math.min(6, histMonths.length);
+
+        function avgByCat(sens, cats) {
+            const catMap = getMonthlyByCat(sens);
+            const result = {};
+            cats.forEach(cat => {
+                const vals = histMonths.slice(-n).map(mk => (catMap[cat] && catMap[cat][mk]) || 0);
+                result[cat] = n > 0 ? vals.reduce((s, v) => s + v, 0) / n : 0;
+            });
+            return result;
+        }
+
+        const encAvgs = avgByCat('Encaissement', SIM_ENC_CATS);
+        const decAvgs = avgByCat('Décaissement', SIM_DEC_CATS);
+
+        // Enc inputs
+        const encContainer = document.getElementById('sim-enc-inputs');
+        encContainer.innerHTML = SIM_ENC_CATS.map(cat => `
+            <div class="sim-input-group">
+                <label>${escapeHtml(cat)}</label>
+                <div class="sim-input-pair">
+                    <div class="sim-field">
+                        <span class="sim-field-label">Ventes/mois (€)</span>
+                        <input type="number" class="sim-input" data-cat="${escapeHtml(cat)}" data-field="amount"
+                               value="${Math.round(encAvgs[cat] || 0)}" step="100" />
+                    </div>
+                    <div class="sim-field">
+                        <span class="sim-field-label">Délai encaissement (j)</span>
+                        <input type="number" class="sim-input" data-cat="${escapeHtml(cat)}" data-field="delay"
+                               value="${SIM_ENC_DELAYS[cat] || 0}" step="5" min="0" />
+                    </div>
+                </div>
+            </div>
+        `).join('');
+
+        // Dec inputs
+        const decContainer = document.getElementById('sim-dec-inputs');
+        decContainer.innerHTML = SIM_DEC_CATS.map(cat => `
+            <div class="sim-input-group">
+                <label>${escapeHtml(cat)}</label>
+                <input type="number" class="sim-input" data-cat="${escapeHtml(cat)}" data-field="decAmount"
+                       value="${Math.round(decAvgs[cat] || 0)}" step="100" />
+            </div>
+        `).join('');
+    }
+
+    function runSimulation() {
+        const futureKeys = getFutureMonthKeys(SIM_MONTHS_AHEAD);
+        const soldeInitial = parseFloat($('#sim-solde-initial').value) || 0;
+
+        // Read enc inputs
+        const encInputs = {};
+        document.querySelectorAll('#sim-enc-inputs input[data-field="amount"]').forEach(inp => {
+            encInputs[inp.dataset.cat] = { amount: parseFloat(inp.value) || 0 };
+        });
+        document.querySelectorAll('#sim-enc-inputs input[data-field="delay"]').forEach(inp => {
+            if (encInputs[inp.dataset.cat]) encInputs[inp.dataset.cat].delay = parseInt(inp.value) || 0;
+        });
+
+        // Read dec inputs
+        const decInputs = {};
+        document.querySelectorAll('#sim-dec-inputs input[data-field="decAmount"]').forEach(inp => {
+            decInputs[inp.dataset.cat] = parseFloat(inp.value) || 0;
+        });
+
+        // Compute monthly enc with delay offset
+        const encByMonth = futureKeys.map(() => 0);
+        const encDetailByMonth = {};
+        for (const cat in encInputs) {
+            const { amount, delay } = encInputs[cat];
+            if (amount === 0) continue;
+            const delayMonths = Math.round((delay || 0) / 30);
+            encDetailByMonth[cat] = futureKeys.map(() => 0);
+            futureKeys.forEach((_, i) => {
+                const targetMonth = i + delayMonths;
+                if (targetMonth < SIM_MONTHS_AHEAD) {
+                    encByMonth[targetMonth] += amount;
+                    encDetailByMonth[cat][targetMonth] += amount;
+                }
+            });
+        }
+
+        // Compute monthly dec
+        const decByMonth = futureKeys.map(() => 0);
+        const decDetailByMonth = {};
+        for (const cat in decInputs) {
+            const amount = decInputs[cat];
+            if (amount === 0) continue;
+            decDetailByMonth[cat] = futureKeys.map(() => amount);
+            futureKeys.forEach((_, i) => { decByMonth[i] += amount; });
+        }
+
+        // Cumulative solde
+        const solde = [];
+        let running = soldeInitial;
+        futureKeys.forEach((_, i) => {
+            running += encByMonth[i] - decByMonth[i];
+            solde.push(running);
+        });
+
+        // Show results
+        const totalEnc = encByMonth.reduce((s, v) => s + v, 0);
+        const totalDec = decByMonth.reduce((s, v) => s + v, 0);
+        const soldeFinal = solde[solde.length - 1] || soldeInitial;
+
+        $('#sim-man-enc').textContent = formatCurrency(totalEnc);
+        $('#sim-man-dec').textContent = formatCurrency(-totalDec);
+        $('#sim-man-solde').textContent = formatCurrency(soldeFinal);
+        $('#sim-man-solde').className = 'sim-kpi-value ' + (soldeFinal >= 0 ? 'sim-positive' : 'sim-negative');
+
+        $('#sim-manual-kpis').style.display = '';
+        $('#sim-manual-chart-wrap').style.display = '';
+        $('#sim-manual-table-wrap').style.display = '';
+
+        // Chart
+        destroyChart('simManual');
+        const ctx = $('#chart-sim-manual').getContext('2d');
+        const defaults = getChartDefaults();
+
+        charts.simManual = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: futureKeys.map(monthKeyToLabel),
+                datasets: [
+                    {
+                        label: 'Encaissements',
+                        data: encByMonth,
+                        backgroundColor: 'rgba(99,102,241,0.5)',
+                        borderColor: 'rgba(99,102,241,0.8)',
+                        borderWidth: 1,
+                    },
+                    {
+                        label: 'Décaissements',
+                        data: decByMonth.map(v => -v),
+                        backgroundColor: 'rgba(248,113,113,0.5)',
+                        borderColor: 'rgba(248,113,113,0.8)',
+                        borderWidth: 1,
+                    },
+                    {
+                        label: 'Solde cumulé',
+                        data: solde,
+                        type: 'line',
+                        borderColor: '#4ade80',
+                        backgroundColor: 'transparent',
+                        borderWidth: 2,
+                        pointRadius: 5,
+                        pointBackgroundColor: solde.map(v => v >= 0 ? '#4ade80' : '#f87171'),
+                        yAxisID: 'y1',
+                    },
+                ]
+            },
+            options: {
+                ...defaults,
+                plugins: {
+                    ...defaults.plugins,
+                    tooltip: {
+                        callbacks: {
+                            label: (ctx) => ctx.dataset.label + ': ' + formatCurrency(ctx.parsed.y)
+                        }
+                    }
+                },
+                scales: {
+                    x: { ticks: { color: 'rgba(255,255,255,0.6)', font: { size: 11 } }, grid: { color: 'rgba(255,255,255,0.05)' } },
+                    y: { position: 'left', ticks: { color: 'rgba(255,255,255,0.6)', callback: v => formatCurrency(v) }, grid: { color: 'rgba(255,255,255,0.05)' } },
+                    y1: { position: 'right', ticks: { color: 'rgba(74,222,128,0.6)', callback: v => formatCurrency(v) }, grid: { display: false } }
+                }
+            }
+        });
+
+        // Detail table
+        const thead = document.getElementById('sim-manual-thead');
+        const tbody = document.getElementById('sim-manual-tbody');
+        thead.innerHTML = `<tr><th>Catégorie</th>${futureKeys.map(k => `<th class="text-right">${monthKeyToLabel(k)}</th>`).join('')}<th class="text-right">Total</th></tr>`;
+
+        let rows = '';
+        rows += `<tr class="sim-section-row"><td colspan="${futureKeys.length + 2}">Encaissements</td></tr>`;
+        for (const cat in encDetailByMonth) {
+            const vals = encDetailByMonth[cat];
+            const total = vals.reduce((s, v) => s + v, 0);
+            if (total === 0) continue;
+            rows += `<tr><td>${escapeHtml(cat)}</td>${vals.map(v => `<td class="text-right">${formatCurrency(v)}</td>`).join('')}<td class="text-right sim-total-cell">${formatCurrency(total)}</td></tr>`;
+        }
+        rows += `<tr class="sim-subtotal-row"><td>Total Encaissements</td>${encByMonth.map(v => `<td class="text-right">${formatCurrency(v)}</td>`).join('')}<td class="text-right">${formatCurrency(totalEnc)}</td></tr>`;
+
+        rows += `<tr class="sim-section-row"><td colspan="${futureKeys.length + 2}">Décaissements</td></tr>`;
+        for (const cat in decDetailByMonth) {
+            const vals = decDetailByMonth[cat];
+            const total = vals.reduce((s, v) => s + v, 0);
+            if (total === 0) continue;
+            rows += `<tr><td>${escapeHtml(cat)}</td>${vals.map(v => `<td class="text-right">${formatCurrency(-v)}</td>`).join('')}<td class="text-right sim-total-cell">${formatCurrency(-total)}</td></tr>`;
+        }
+        rows += `<tr class="sim-subtotal-row"><td>Total Décaissements</td>${decByMonth.map(v => `<td class="text-right">${formatCurrency(-v)}</td>`).join('')}<td class="text-right">${formatCurrency(-totalDec)}</td></tr>`;
+
+        rows += `<tr class="sim-net-row"><td>Solde net mensuel</td>${futureKeys.map((_, i) => {
+            const net = encByMonth[i] - decByMonth[i];
+            return `<td class="text-right ${net >= 0 ? 'sim-positive' : 'sim-negative'}">${formatCurrency(net)}</td>`;
+        }).join('')}<td class="text-right ${totalEnc - totalDec >= 0 ? 'sim-positive' : 'sim-negative'}">${formatCurrency(totalEnc - totalDec)}</td></tr>`;
+
+        rows += `<tr class="sim-solde-row"><td>Solde cumulé</td>${solde.map(v => `<td class="text-right ${v >= 0 ? 'sim-positive' : 'sim-negative'}">${formatCurrency(v)}</td>`).join('')}<td></td></tr>`;
+
+        tbody.innerHTML = rows;
+    }
+
+    // Wire simulation buttons
+    $('#sim-btn-run').addEventListener('click', runSimulation);
+    $('#sim-btn-reset').addEventListener('click', () => {
+        buildSimInputs();
+        $('#sim-manual-kpis').style.display = 'none';
+        $('#sim-manual-chart-wrap').style.display = 'none';
+        $('#sim-manual-table-wrap').style.display = 'none';
+        destroyChart('simManual');
+    });
+
+    // ── Render simulation tab ──
+    function renderSimulationTab() {
+        if (rawData.length === 0) return;
+        renderSimProjection();
+        buildSimInputs();
+    }
 
     // ── Mouse glow ──
     document.addEventListener('mousemove', (e) => {

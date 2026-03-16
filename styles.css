@@ -1505,3 +1505,246 @@ body::before {
 .dq-row-confirmed {
     background: rgba(74,222,128,0.05);
 }
+
+/* ============================
+   Simulation Tab
+   ============================ */
+
+.sim-panel {
+    margin-bottom: 2.5rem;
+    padding-bottom: 2rem;
+    border-bottom: 1px solid var(--border-color);
+}
+.sim-panel:last-child {
+    border-bottom: none;
+}
+.sim-panel-header {
+    margin-bottom: 1.2rem;
+}
+.sim-panel-header h2 {
+    color: var(--text-primary);
+    margin: 0 0 0.3rem 0;
+}
+.sim-subtitle {
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    margin: 0;
+}
+
+/* Model toggle */
+.sim-toggle-bar {
+    display: flex;
+    gap: 0.25rem;
+    background: var(--bg-input);
+    border-radius: var(--radius-md);
+    padding: 0.2rem;
+    width: fit-content;
+    margin-bottom: 1.2rem;
+}
+.sim-model-btn {
+    padding: 0.45rem 1rem;
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    font-family: 'Inter', sans-serif;
+    font-size: 0.8rem;
+    font-weight: 500;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: all 0.15s ease;
+    white-space: nowrap;
+}
+.sim-model-btn:hover {
+    color: var(--text-secondary);
+    background: rgba(255,255,255,0.04);
+}
+.sim-model-btn.active {
+    background: var(--accent);
+    color: #fff;
+    font-weight: 600;
+}
+
+/* KPI row */
+.sim-kpi-row {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+.sim-kpi {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    padding: 1rem 1.2rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+}
+.sim-kpi-label {
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    font-weight: 500;
+}
+.sim-kpi-value {
+    font-size: 1.3rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    font-family: 'JetBrains Mono', monospace;
+}
+.sim-positive { color: #4ade80 !important; }
+.sim-negative { color: #f87171 !important; }
+
+/* Charts */
+.sim-chart-card {
+    margin-bottom: 1.5rem;
+}
+
+/* Detail tables */
+.sim-table-wrapper {
+    margin-bottom: 1.5rem;
+}
+.sim-detail-table {
+    font-size: 0.8rem;
+}
+.sim-detail-table th {
+    white-space: nowrap;
+}
+.sim-section-row {
+    background: rgba(99,102,241,0.08);
+}
+.sim-section-row td {
+    font-weight: 700;
+    font-size: 0.82rem;
+    color: var(--accent);
+    padding: 0.5rem 0.75rem;
+}
+.sim-subtotal-row {
+    background: rgba(255,255,255,0.03);
+}
+.sim-subtotal-row td {
+    font-weight: 700;
+    border-top: 1px solid var(--border-color);
+}
+.sim-net-row td {
+    font-weight: 700;
+    border-top: 2px solid var(--border-color);
+    font-size: 0.85rem;
+}
+.sim-solde-row td {
+    font-weight: 700;
+    background: rgba(74,222,128,0.05);
+    font-size: 0.85rem;
+}
+.sim-total-cell {
+    font-weight: 600;
+}
+
+/* ── Simulation form ── */
+.sim-form-section {
+    margin-bottom: 1.5rem;
+}
+.sim-form-section h3 {
+    color: var(--text-primary);
+    font-size: 0.95rem;
+    margin: 0 0 0.75rem 0;
+}
+.sim-form-row {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 0.5rem;
+}
+.sim-form-row label {
+    color: var(--text-secondary);
+    font-size: 0.82rem;
+    font-weight: 500;
+    white-space: nowrap;
+    min-width: 160px;
+}
+.sim-input {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    padding: 0.45rem 0.6rem;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.8rem;
+    width: 140px;
+    text-align: right;
+}
+.sim-input:focus {
+    border-color: var(--accent);
+    outline: none;
+}
+.sim-cat-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 0.75rem;
+}
+.sim-input-group {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    padding: 0.75rem 1rem;
+}
+.sim-input-group label {
+    display: block;
+    color: var(--text-primary);
+    font-size: 0.82rem;
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+}
+.sim-input-pair {
+    display: flex;
+    gap: 0.75rem;
+}
+.sim-field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    flex: 1;
+}
+.sim-field-label {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+}
+.sim-input-group .sim-input {
+    width: 100%;
+    box-sizing: border-box;
+}
+
+/* Buttons */
+.sim-form-actions {
+    display: flex;
+    gap: 0.75rem;
+    margin-bottom: 1.5rem;
+}
+.sim-btn-run {
+    padding: 0.6rem 1.5rem;
+    background: linear-gradient(135deg, #6366f1, #8b5cf6);
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 700;
+    font-size: 0.9rem;
+    transition: opacity 0.2s;
+}
+.sim-btn-run:hover {
+    opacity: 0.85;
+}
+.sim-btn-reset {
+    padding: 0.6rem 1.5rem;
+    background: transparent;
+    color: var(--text-muted);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 500;
+    font-size: 0.9rem;
+    transition: all 0.15s;
+}
+.sim-btn-reset:hover {
+    color: var(--text-primary);
+    border-color: var(--text-muted);
+}
