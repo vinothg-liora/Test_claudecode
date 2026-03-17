@@ -2050,3 +2050,103 @@ body::before {
     padding: 0.25rem 0.3rem;
     flex-shrink: 0;
 }
+
+/* ── Rules recap tabs (Fichiers tab) ── */
+.ft-rules-tabs {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+}
+.ft-rules-tab {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 0.82rem;
+    font-weight: 500;
+    padding: 0.4rem 0.8rem;
+    transition: all 0.15s;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+.ft-rules-tab:hover {
+    border-color: var(--accent-bg);
+    color: var(--text-primary);
+}
+.ft-rules-tab.active {
+    background: var(--accent-bg);
+    border-color: var(--accent);
+    color: var(--accent);
+}
+.ft-rules-tab-count {
+    background: var(--accent-bg);
+    color: var(--accent);
+    font-size: 0.7rem;
+    font-weight: 700;
+    padding: 0.1rem 0.35rem;
+    border-radius: 8px;
+    min-width: 1.2rem;
+    text-align: center;
+}
+.ft-rules-recap-panel {
+    display: none;
+}
+.ft-rules-recap-panel.active {
+    display: block;
+}
+.ft-builtin-group {
+    margin-bottom: 0.75rem;
+}
+.ft-builtin-group-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: pointer;
+    padding: 0.4rem 0.5rem;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    margin-bottom: 0.25rem;
+    transition: border-color 0.15s;
+}
+.ft-builtin-group-header:hover {
+    border-color: var(--accent-bg);
+}
+.ft-builtin-group-header .ft-builtin-arrow {
+    color: var(--text-muted);
+    font-size: 0.7rem;
+    transition: transform 0.2s;
+}
+.ft-builtin-group-header.open .ft-builtin-arrow {
+    transform: rotate(90deg);
+}
+.ft-builtin-group-header h4 {
+    margin: 0;
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+.ft-builtin-group-header .ft-builtin-count {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+}
+.ft-builtin-keywords {
+    display: none;
+    flex-wrap: wrap;
+    gap: 0.3rem;
+    padding: 0.5rem 0.5rem 0.5rem 1.5rem;
+}
+.ft-builtin-keywords.open {
+    display: flex;
+}
+.ft-builtin-kw {
+    background: var(--bg-body);
+    border: 1px solid var(--border-color);
+    border-radius: 3px;
+    color: var(--text-secondary);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.72rem;
+    padding: 0.15rem 0.4rem;
+}

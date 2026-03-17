@@ -116,17 +116,26 @@
     // Strip banking noise from libellé to extract meaningful keywords
     function cleanLibelleForLearning(libelle) {
         let s = normUpper(libelle);
-        // Remove common banking operation prefixes
+        // Remove leading standalone numbers (reference numbers at the beginning)
+        s = s.replace(/^\d+\s+/, '');
+        // Remove common banking operation prefixes (VIR SEPA RECU, PRLV SEPA, etc.)
         s = s.replace(/^(VIR(EMENT)?\s*(SEPA)?\s*(EMIS|RECU|INST)?|PRLV\s*(SEPA)?|PRELEVEMENT\s*(SEPA)?|CHQ\s*N?\d*|CB\s*\d*|CARTE\s*\d*|REM\s*CHQ|AVOIR|ECHEANCE)\s*/i, '');
-        // Remove reference numbers (/REF..., /PID..., /MOTIF..., /ID..., etc.)
-        s = s.replace(/\/[A-Z]{2,10}\s*[:\-]?\s*[A-Z0-9\-]+/g, '');
+        // Extract /FRM content (the payer/beneficiary name) if present
+        const frmMatch = s.match(/\/FRM\s+([^/]+)/i);
+        if (frmMatch) {
+            s = frmMatch[1].trim();
+        }
+        // Remove reference blocks (/REF..., /PID..., /MOTIF..., /EID..., /ID..., etc.)
+        s = s.replace(/\/[A-Z]{2,10}\s*[:\-]?\s*[^\s/]*/g, '');
         // Remove standalone dates (DD/MM/YYYY, DD-MM-YYYY, DDMMYY, etc.)
         s = s.replace(/\b\d{1,2}[\/-]\d{1,2}[\/-]\d{2,4}\b/g, '');
         s = s.replace(/\b\d{6,8}\b/g, ''); // DDMMYYYY or DDMMYY
-        // Remove standalone long numbers (reference/account numbers, 5+ digits)
-        s = s.replace(/\b\d{5,}\b/g, '');
+        // Remove standalone long numbers (reference/account numbers, 4+ digits)
+        s = s.replace(/\b\d{4,}\b/g, '');
         // Remove "N°..." or "NO..." patterns
         s = s.replace(/\bN[O°]\s*\d+/gi, '');
+        // Remove trailing single letter or short noise
+        s = s.replace(/\s+[A-Z]\.?$/i, '');
         // Collapse whitespace
         s = s.replace(/\s+/g, ' ').trim();
         return s;
@@ -1877,7 +1886,108 @@
         });
     }
 
-    // ── Learned Rules Rendering (in Fichiers tab) ──
+    // ── Rules Recap (in Fichiers tab) ──
+    function renderRulesRecap() {
+        // Learned rules list (read-only view)
+        const learnedContainer = document.getElementById('ft-recap-learned-list');
+        const learnedCountEl = document.getElementById('ft-recap-learned-count');
+        if (!learnedContainer) return;
+        const entries = Object.entries(_learnedCache);
+        if (learnedCountEl) learnedCountEl.textContent = entries.length;
+        if (entries.length === 0) {
+            learnedContainer.innerHTML = '<p class="ft-empty">Aucune règle apprise. Reclassez des transactions dans l\'onglet Data Quality pour créer des règles.</p>';
+        } else {
+            entries.sort((a, b) => (b[1].date || 0) - (a[1].date || 0));
+            let html = '';
+            entries.forEach(([key, val]) => {
+                const sensLabel = val.sens === 'Encaissement' ? 'Enc.' : 'Déc.';
+                const sensClass = val.sens === 'Encaissement' ? 'ft-rule-enc' : 'ft-rule-dec';
+                html += `<div class="ft-rule-item">
+                    <div class="ft-rule-content">
+                        <span class="ft-rule-badge ${sensClass}">${sensLabel}</span>
+                        <span class="ft-rule-key">${escapeHtml(key)}</span>
+                        <span class="ft-rule-arrow">→</span>
+                        <span class="ft-rule-cat">${escapeHtml(val.category)}</span>
+                    </div>
+                </div>`;
+            });
+            learnedContainer.innerHTML = html;
+        }
+
+        // Built-in rules list (grouped by category)
+        const builtinContainer = document.getElementById('ft-recap-builtin-list');
+        if (!builtinContainer) return;
+        const builtinRules = [
+            { label: 'Interco (Enc.)', keys: INTERCO_ENC_KEYS, sens: 'enc' },
+            { label: 'Alternance (OPCO)', keys: OPCO_KEYS, sens: 'enc' },
+            { label: 'CPF', keys: CPF_KEYS, sens: 'enc' },
+            { label: 'Reconversion', keys: RECONV_KEYS, sens: 'enc' },
+            { label: 'B2B', keys: B2B_EXTRA, sens: 'enc' },
+            { label: 'B2C (PSP)', keys: B2C_PSP, sens: 'enc' },
+            { label: 'Autres revenus', keys: AUTRES_REV_KEYS, sens: 'enc' },
+            { label: 'Interco (Déc.)', keys: INTERCO_DEC_KEYS, sens: 'dec' },
+            { label: 'Banques/Dettes', keys: BANQUES_DETTES_KEYS, sens: 'dec' },
+            { label: 'Frais généraux & services', keys: FGS_KEYS, sens: 'dec' },
+            { label: 'Note de frais', keys: NOTES_FRAIS_KEYS, sens: 'dec' },
+            { label: 'Prévoyance / Mutuelle', keys: PREVOYANCE_KEYS, sens: 'dec' },
+            { label: 'SaaS/IT', keys: SAAS_IT_KEYS, sens: 'dec' },
+            { label: 'Marketing & Acquisition', keys: MKT_ACQ_KEYS, sens: 'dec' },
+            { label: 'URSSAF', keys: URSSAF_KEYS, sens: 'dec' },
+            { label: 'Partenariat académique', keys: PA_ACAD_KEYS, sens: 'dec' },
+            { label: 'Formateurs / Freelances (génériques)', keys: FF_GEN_KEYS, sens: 'dec' },
+            { label: 'Formateurs / Freelances (spécifiques)', keys: FF_SPECIFIC_KEYS, sens: 'dec' },
+            { label: 'Remboursement', keys: REMBOURSEMENT_KEYS, sens: 'dec' },
+            { label: 'Salaires', keys: SALAIRES_HINTS, sens: 'dec' },
+            { label: 'Loyers & charges', keys: LOYERS_KEYS, sens: 'dec' },
+            { label: 'Autres impôts', keys: AUTRES_IMPOTS_KEYS, sens: 'dec' },
+        ];
+        let bhtml = '';
+        builtinRules.forEach((rule, i) => {
+            const sensLabel = rule.sens === 'enc' ? 'Enc.' : 'Déc.';
+            const sensClass = rule.sens === 'enc' ? 'ft-rule-enc' : 'ft-rule-dec';
+            bhtml += `<div class="ft-builtin-group">
+                <div class="ft-builtin-group-header" data-builtin-idx="${i}">
+                    <span class="ft-builtin-arrow">▶</span>
+                    <span class="ft-rule-badge ${sensClass}">${sensLabel}</span>
+                    <h4>${escapeHtml(rule.label)}</h4>
+                    <span class="ft-builtin-count">${rule.keys.length} mots-clés</span>
+                </div>
+                <div class="ft-builtin-keywords" data-builtin-body="${i}">
+                    ${rule.keys.map(k => `<span class="ft-builtin-kw">${escapeHtml(k)}</span>`).join('')}
+                </div>
+            </div>`;
+        });
+        builtinContainer.innerHTML = bhtml;
+
+        // Toggle groups
+        builtinContainer.querySelectorAll('.ft-builtin-group-header').forEach(header => {
+            header.addEventListener('click', () => {
+                const idx = header.dataset.builtinIdx;
+                const body = builtinContainer.querySelector(`[data-builtin-body="${idx}"]`);
+                header.classList.toggle('open');
+                body.classList.toggle('open');
+            });
+        });
+    }
+
+    // Wire rules recap tab switching
+    document.querySelectorAll('.ft-rules-tab').forEach(tab => {
+        tab.addEventListener('click', () => {
+            document.querySelectorAll('.ft-rules-tab').forEach(t => t.classList.remove('active'));
+            tab.classList.add('active');
+            document.querySelectorAll('.ft-rules-recap-panel').forEach(p => {
+                p.classList.remove('active');
+                p.style.display = 'none';
+            });
+            const target = document.getElementById('ft-rules-recap-' + tab.dataset.rulesTab);
+            if (target) {
+                target.classList.add('active');
+                target.style.display = '';
+            }
+        });
+    });
+
+    // ── Learned Rules Rendering (in Data Quality tab) ──
     function renderLearnedRules() {
         const container = document.getElementById('ft-learned-rules');
         const clearBtn = document.getElementById('ft-clear-learned');
@@ -1984,18 +2094,27 @@
                 }
                 _learnedCache[newKey] = { ...oldVal, category: newCat, date: Date.now() };
                 await saveLearnedCategories();
-                // Re-categorize and refresh
+                // Re-categorize and refresh everything
                 categorizeAll(rawData);
+                await saveToStorage();
                 computeFilteredData();
+                renderDataQuality();
                 renderLearnedRules();
                 refreshDashboard();
             });
 
             btnDelete.addEventListener('click', async () => {
                 await deleteLearnedRule(ruleKey);
+                categorizeAll(rawData);
+                await saveToStorage();
+                computeFilteredData();
+                renderDataQuality();
                 renderLearnedRules();
+                refreshDashboard();
             });
         });
+        // Also refresh the recap in Fichiers tab if visible
+        renderRulesRecap();
     }
 
     // Clear all learned rules
@@ -2003,7 +2122,12 @@
         if (!confirm('Supprimer toutes les règles apprises ?')) return;
         _learnedCache = {};
         await saveLearnedCategories();
+        categorizeAll(rawData);
+        await saveToStorage();
+        computeFilteredData();
+        renderDataQuality();
         renderLearnedRules();
+        refreshDashboard();
     });
 
     // ── Auto-load from IndexedDB on startup ──
@@ -2036,7 +2160,7 @@
             if (target) target.classList.add('active');
             if (btn.dataset.tab === 'dataquality') { renderDataQuality(); renderLearnedRules(); }
             if (btn.dataset.tab === 'simulation') renderSimulationTab();
-            if (btn.dataset.tab === 'fichiers') renderFileHistory();
+            if (btn.dataset.tab === 'fichiers') { renderFileHistory(); renderRulesRecap(); }
         });
     });
 
@@ -2436,6 +2560,7 @@ Réponds UNIQUEMENT en JSON valide (pas de markdown), sous forme d'un tableau :
             await saveToStorage();
             computeFilteredData();
             renderDataQuality();
+            renderLearnedRules();
             refreshDashboard();
         };
     }

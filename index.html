@@ -612,6 +612,24 @@
                 </div>
             </div>
 
+            <!-- Assignment rules recap section -->
+            <div class="ft-section">
+                <div class="ft-section-header">
+                    <h3>Règles d'affectation</h3>
+                </div>
+                <p class="ft-subtitle">Récapitulatif de toutes les règles de catégorisation : règles intégrées (mots-clés) et règles apprises via Data Quality.</p>
+                <div class="ft-rules-tabs">
+                    <button class="ft-rules-tab active" data-rules-tab="learned">Règles apprises <span class="ft-rules-tab-count" id="ft-recap-learned-count">0</span></button>
+                    <button class="ft-rules-tab" data-rules-tab="builtin">Règles intégrées</button>
+                </div>
+                <div id="ft-rules-recap-learned" class="ft-rules-recap-panel active">
+                    <div id="ft-recap-learned-list" class="ft-learned-list"></div>
+                </div>
+                <div id="ft-rules-recap-builtin" class="ft-rules-recap-panel" style="display:none">
+                    <div id="ft-recap-builtin-list"></div>
+                </div>
+            </div>
+
             <!-- API Key section -->
             <div class="ft-section">
                 <h3>Clé API Claude (IA)</h3>
