@@ -2328,8 +2328,8 @@ Réponds UNIQUEMENT en JSON valide (pas de markdown), sous forme d'un tableau :
     }
 
     function renderDataQuality() {
-        const allDivers = rawData.filter(r => r.sens === 'Décaissement' && r.categorie === 'DIVERS');
-        const allAutres = rawData.filter(r => r.sens === 'Encaissement' && r.categorie === 'Autres revenus');
+        const allDivers = rawData.filter(r => r.sens === 'Décaissement' && r.categorie === 'DIVERS' && !r.manualCategory);
+        const allAutres = rawData.filter(r => r.sens === 'Encaissement' && r.categorie === 'Autres revenus' && !r.manualCategory);
 
         populateDqMonthFilter([...allDivers, ...allAutres]);
 
@@ -2342,8 +2342,8 @@ Réponds UNIQUEMENT en JSON valide (pas de markdown), sous forme d'un tableau :
         $('#dq-count-divers').textContent = diversRows.length;
         $('#dq-count-autres').textContent = autresRows.length;
 
-        renderDqTable('dq-body-divers', diversRows, DEC_CATEGORIES.filter(c => c !== 'DIVERS'), 'dq-bulk-divers', 'dq-suggest-divers');
-        renderDqTable('dq-body-autres', autresRows, ENC_CATEGORIES.filter(c => c !== 'Autres revenus'), 'dq-bulk-autres', 'dq-suggest-autres');
+        renderDqTable('dq-body-divers', diversRows, DEC_CATEGORIES, 'dq-bulk-divers', 'dq-suggest-divers');
+        renderDqTable('dq-body-autres', autresRows, ENC_CATEGORIES, 'dq-bulk-autres', 'dq-suggest-autres');
         updateSuggestButtons();
     }
 
