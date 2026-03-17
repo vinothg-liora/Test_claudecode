@@ -2188,19 +2188,64 @@
         return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
     }
 
-    function populateDqMonthFilter(rows) {
-        const sel = $('#dq-filter-month');
-        const prev = sel.value;
-        const months = new Set();
-        rows.forEach(r => { const k = getDqMonthKey(r); if (k) months.add(k); });
-        const sorted = [...months].sort();
-        sel.innerHTML = '<option value="">Tous les mois</option>';
-        sorted.forEach(k => {
-            const [y, m] = k.split('-');
-            const label = MONTH_NAMES[parseInt(m) - 1] + ' ' + y;
-            sel.innerHTML += `<option value="${k}"${k === prev ? ' selected' : ''}>${label}</option>`;
+    // DQ multi-month filter state: null = all selected
+    let dqSelectedMonths = null;
+    let dqAllMonthKeys = [];
+
+    function populateDqMonthFilter() {
+        // Use ALL months from rawData, not just unclassified rows
+        const monthSet = new Set();
+        rawData.forEach(r => { const k = getDqMonthKey(r); if (k) monthSet.add(k); });
+        dqAllMonthKeys = [...monthSet].sort();
+        renderDqMonthButtons();
+    }
+
+    function renderDqMonthButtons() {
+        const container = document.getElementById('dq-filter-months');
+        if (!container) return;
+        container.innerHTML = '';
+        dqAllMonthKeys.forEach(mk => {
+            const [y, m] = mk.split('-');
+            const label = new Date(+y, +m - 1).toLocaleDateString('fr-FR', { month: 'short', year: '2-digit' });
+            const btn = document.createElement('button');
+            btn.className = 'date-month-btn';
+            btn.dataset.month = mk;
+            btn.textContent = label;
+            if (!dqSelectedMonths || dqSelectedMonths.has(mk)) {
+                btn.classList.add('active');
+            }
+            btn.addEventListener('click', () => toggleDqMonth(mk));
+            container.appendChild(btn);
         });
     }
+
+    function toggleDqMonth(mk) {
+        if (!dqSelectedMonths) {
+            dqSelectedMonths = new Set(dqAllMonthKeys);
+            dqSelectedMonths.delete(mk);
+        } else if (dqSelectedMonths.has(mk)) {
+            dqSelectedMonths.delete(mk);
+        } else {
+            dqSelectedMonths.add(mk);
+        }
+        if (dqSelectedMonths.size === dqAllMonthKeys.length) {
+            dqSelectedMonths = null;
+        }
+        renderDqMonthButtons();
+        renderDataQuality();
+    }
+
+    document.getElementById('dq-select-all').addEventListener('click', () => {
+        dqSelectedMonths = null;
+        renderDqMonthButtons();
+        renderDataQuality();
+    });
+
+    document.getElementById('dq-select-none').addEventListener('click', () => {
+        dqSelectedMonths = new Set();
+        renderDqMonthButtons();
+        renderDataQuality();
+    });
 
     // ── Claude API for category suggestion ──
     function getDqApiKey() {
@@ -2455,10 +2500,12 @@ Réponds UNIQUEMENT en JSON valide (pas de markdown), sous forme d'un tableau :
         const allDivers = rawData.filter(r => r.sens === 'Décaissement' && r.categorie === 'DIVERS' && !r.manualCategory);
         const allAutres = rawData.filter(r => r.sens === 'Encaissement' && r.categorie === 'Autres revenus' && !r.manualCategory);
 
-        populateDqMonthFilter([...allDivers, ...allAutres]);
+        populateDqMonthFilter();
 
-        const monthFilter = $('#dq-filter-month').value;
-        const filterByMonth = (rows) => monthFilter ? rows.filter(r => getDqMonthKey(r) === monthFilter) : rows;
+        const filterByMonth = (rows) => {
+            if (!dqSelectedMonths) return rows; // null = all selected
+            return rows.filter(r => { const k = getDqMonthKey(r); return k && dqSelectedMonths.has(k); });
+        };
 
         const diversRows = filterByMonth(allDivers);
         const autresRows = filterByMonth(allAutres);
@@ -2471,7 +2518,7 @@ Réponds UNIQUEMENT en JSON valide (pas de markdown), sous forme d'un tableau :
         updateSuggestButtons();
     }
 
-    $('#dq-filter-month').addEventListener('change', renderDataQuality);
+    // Month filter is now driven by button clicks (toggleDqMonth, dq-select-all, dq-select-none)
 
     function renderDqTable(tbodyId, rows, categories, bulkBtnId, suggestBtnId) {
         const tbody = document.getElementById(tbodyId);
