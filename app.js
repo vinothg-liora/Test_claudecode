@@ -1895,24 +1895,103 @@
         entries.forEach(([key, val]) => {
             const sensLabel = val.sens === 'Encaissement' ? 'Enc.' : 'Déc.';
             const sensClass = val.sens === 'Encaissement' ? 'ft-rule-enc' : 'ft-rule-dec';
-            html += `<div class="ft-rule-item">
+            const cats = val.sens === 'Encaissement' ? ENC_CATEGORIES : DEC_CATEGORIES;
+            const catOptions = cats.map(c =>
+                `<option value="${escapeHtml(c)}"${c === val.category ? ' selected' : ''}>${escapeHtml(c)}</option>`
+            ).join('');
+            html += `<div class="ft-rule-item" data-rule-key="${escapeHtml(key)}">
                 <div class="ft-rule-content">
                     <span class="ft-rule-badge ${sensClass}">${sensLabel}</span>
-                    <span class="ft-rule-key" title="Mot-clé nettoyé">${escapeHtml(key)}</span>
+                    <span class="ft-rule-key" title="Mot-clé nettoyé (cliquez sur ✏️ pour modifier)">${escapeHtml(key)}</span>
+                    <input class="ft-rule-edit-input" style="display:none" value="${escapeHtml(key)}">
                     <span class="ft-rule-arrow">→</span>
                     <span class="ft-rule-cat">${escapeHtml(val.category)}</span>
+                    <select class="ft-rule-edit-cat" style="display:none">${catOptions}</select>
                 </div>
-                <button class="ft-btn-delete" data-rule-key="${escapeHtml(key)}" title="Supprimer cette règle">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-                </button>
+                <div class="ft-rule-actions">
+                    <button class="ft-btn-edit" title="Modifier cette règle">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                    </button>
+                    <button class="ft-btn-save" style="display:none" title="Enregistrer">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                    </button>
+                    <button class="ft-btn-cancel" style="display:none" title="Annuler">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                    </button>
+                    <button class="ft-btn-delete" title="Supprimer cette règle">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                    </button>
+                </div>
             </div>`;
         });
         container.innerHTML = html;
 
-        // Wire delete buttons
-        container.querySelectorAll('.ft-btn-delete[data-rule-key]').forEach(btn => {
-            btn.addEventListener('click', async () => {
-                const ruleKey = btn.dataset.ruleKey;
+        // Wire edit/save/cancel/delete buttons
+        container.querySelectorAll('.ft-rule-item').forEach(item => {
+            const ruleKey = item.dataset.ruleKey;
+            const keySpan = item.querySelector('.ft-rule-key');
+            const keyInput = item.querySelector('.ft-rule-edit-input');
+            const catSpan = item.querySelector('.ft-rule-cat');
+            const catSelect = item.querySelector('.ft-rule-edit-cat');
+            const btnEdit = item.querySelector('.ft-btn-edit');
+            const btnSave = item.querySelector('.ft-btn-save');
+            const btnCancel = item.querySelector('.ft-btn-cancel');
+            const btnDelete = item.querySelector('.ft-btn-delete');
+
+            function enterEditMode() {
+                keySpan.style.display = 'none';
+                catSpan.style.display = 'none';
+                item.querySelector('.ft-rule-arrow').style.display = 'none';
+                keyInput.style.display = '';
+                catSelect.style.display = '';
+                btnEdit.style.display = 'none';
+                btnSave.style.display = '';
+                btnCancel.style.display = '';
+                btnDelete.style.display = 'none';
+                keyInput.focus();
+            }
+
+            function exitEditMode() {
+                keySpan.style.display = '';
+                catSpan.style.display = '';
+                item.querySelector('.ft-rule-arrow').style.display = '';
+                keyInput.style.display = 'none';
+                catSelect.style.display = 'none';
+                btnEdit.style.display = '';
+                btnSave.style.display = 'none';
+                btnCancel.style.display = 'none';
+                btnDelete.style.display = '';
+                keyInput.value = ruleKey;
+                catSelect.value = _learnedCache[ruleKey]?.category || '';
+            }
+
+            btnEdit.addEventListener('click', enterEditMode);
+            btnCancel.addEventListener('click', exitEditMode);
+            keyInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape') exitEditMode();
+                if (e.key === 'Enter') btnSave.click();
+            });
+
+            btnSave.addEventListener('click', async () => {
+                const newKey = keyInput.value.trim().toUpperCase();
+                const newCat = catSelect.value;
+                if (newKey.length < 2) return;
+                const oldVal = _learnedCache[ruleKey];
+                if (!oldVal) return;
+                // Delete old key if it changed
+                if (newKey !== ruleKey) {
+                    delete _learnedCache[ruleKey];
+                }
+                _learnedCache[newKey] = { ...oldVal, category: newCat, date: Date.now() };
+                await saveLearnedCategories();
+                // Re-categorize and refresh
+                categorizeAll(rawData);
+                computeFilteredData();
+                renderLearnedRules();
+                refreshDashboard();
+            });
+
+            btnDelete.addEventListener('click', async () => {
                 await deleteLearnedRule(ruleKey);
                 renderLearnedRules();
             });
