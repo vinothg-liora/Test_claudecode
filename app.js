@@ -1987,6 +1987,32 @@
         });
     });
 
+    // ── Helpers for learned rules ──
+    function countMatchingDqRows(ruleKey, sens) {
+        const defaultCat = sens === 'Encaissement' ? 'Autres revenus' : 'DIVERS';
+        return rawData.filter(r => {
+            if (r.sens !== sens || r.manualCategory || r.categorie !== defaultCat) return false;
+            const cleaned = cleanLibelleForLearning(normUpper(r.libelle));
+            return cleaned.includes(ruleKey) || ruleKey.includes(cleaned);
+        }).length;
+    }
+
+    function applyRuleToDqRows(ruleKey, val) {
+        const defaultCat = val.sens === 'Encaissement' ? 'Autres revenus' : 'DIVERS';
+        let applied = 0;
+        rawData.forEach(r => {
+            if (r.sens !== val.sens || r.manualCategory || r.categorie !== defaultCat) return;
+            const cleaned = cleanLibelleForLearning(normUpper(r.libelle));
+            if (cleaned.includes(ruleKey) || ruleKey.includes(cleaned)) {
+                r.categorie = val.category;
+                r.manualCategory = val.category;
+                r.ruleHit = 'DQ: Règle apprise validée';
+                applied++;
+            }
+        });
+        return applied;
+    }
+
     // ── Learned Rules Rendering (in Data Quality tab) ──
     function renderLearnedRules() {
         const container = document.getElementById('ft-learned-rules');
@@ -2009,6 +2035,12 @@
             const catOptions = cats.map(c =>
                 `<option value="${escapeHtml(c)}"${c === val.category ? ' selected' : ''}>${escapeHtml(c)}</option>`
             ).join('');
+            // Count matching unclassified transactions
+            const matchCount = countMatchingDqRows(key, val.sens);
+            const confirmLabel = matchCount > 0
+                ? `Valider (${matchCount})`
+                : 'Validé';
+            const confirmDisabled = matchCount === 0 ? ' disabled' : '';
             html += `<div class="ft-rule-item" data-rule-key="${escapeHtml(key)}">
                 <div class="ft-rule-content">
                     <span class="ft-rule-badge ${sensClass}">${sensLabel}</span>
@@ -2019,6 +2051,9 @@
                     <select class="ft-rule-edit-cat" style="display:none">${catOptions}</select>
                 </div>
                 <div class="ft-rule-actions">
+                    <button class="ft-btn-confirm-rule${matchCount === 0 ? ' ft-btn-confirmed' : ''}"${confirmDisabled} title="Appliquer cette règle à toutes les transactions correspondantes">
+                        ${confirmLabel}
+                    </button>
                     <button class="ft-btn-edit" title="Modifier cette règle">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                     </button>
@@ -2047,6 +2082,23 @@
             const btnSave = item.querySelector('.ft-btn-save');
             const btnCancel = item.querySelector('.ft-btn-cancel');
             const btnDelete = item.querySelector('.ft-btn-delete');
+            const btnConfirm = item.querySelector('.ft-btn-confirm-rule');
+
+            // Confirm/validate rule: apply to all matching DQ rows
+            if (btnConfirm && !btnConfirm.disabled) {
+                btnConfirm.addEventListener('click', async () => {
+                    const val = _learnedCache[ruleKey];
+                    if (!val) return;
+                    const count = applyRuleToDqRows(ruleKey, val);
+                    if (count > 0) {
+                        await saveToStorage();
+                        computeFilteredData();
+                        renderDataQuality();
+                        renderLearnedRules();
+                        refreshDashboard();
+                    }
+                });
+            }
 
             function enterEditMode() {
                 keySpan.style.display = 'none';
@@ -2055,6 +2107,7 @@
                 keyInput.style.display = '';
                 catSelect.style.display = '';
                 btnEdit.style.display = 'none';
+                btnConfirm.style.display = 'none';
                 btnSave.style.display = '';
                 btnCancel.style.display = '';
                 btnDelete.style.display = 'none';
@@ -2068,6 +2121,7 @@
                 keyInput.style.display = 'none';
                 catSelect.style.display = 'none';
                 btnEdit.style.display = '';
+                btnConfirm.style.display = '';
                 btnSave.style.display = 'none';
                 btnCancel.style.display = 'none';
                 btnDelete.style.display = '';
