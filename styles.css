@@ -1874,45 +1874,9 @@ body::before {
     white-space: nowrap;
     flex-shrink: 0;
 }
-.ft-btn-delete {
-    background: transparent;
-    border: 1px solid transparent;
-    color: var(--text-muted);
-    border-radius: var(--radius-sm);
-    padding: 0.35rem;
-    cursor: pointer;
-    transition: all 0.15s;
-    flex-shrink: 0;
-}
 .ft-btn-delete:hover {
     color: #f87171;
-    border-color: rgba(248,113,113,0.3);
     background: rgba(248,113,113,0.08);
-}
-.ft-btn-confirm-rule {
-    background: rgba(74,222,128,0.12);
-    border: 1px solid rgba(74,222,128,0.4);
-    color: #4ade80;
-    border-radius: var(--radius-sm);
-    padding: 0.25rem 0.6rem;
-    cursor: pointer;
-    font-size: 0.75rem;
-    font-weight: 600;
-    transition: all 0.15s;
-    flex-shrink: 0;
-    white-space: nowrap;
-}
-.ft-btn-confirm-rule:hover:not(:disabled) {
-    background: rgba(74,222,128,0.25);
-    border-color: #4ade80;
-}
-.ft-btn-confirm-rule:disabled,
-.ft-btn-confirm-rule.ft-btn-confirmed {
-    background: rgba(74,222,128,0.06);
-    border-color: rgba(74,222,128,0.15);
-    color: rgba(74,222,128,0.4);
-    cursor: default;
-    font-weight: 500;
 }
 
 /* API key row */
@@ -1953,18 +1917,24 @@ body::before {
     gap: 0.4rem;
 }
 .ft-rule-item {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
     background: var(--bg-card);
     border: 1px solid var(--border-color);
     border-radius: var(--radius-sm);
-    padding: 0.55rem 0.75rem;
     font-size: 0.82rem;
     transition: border-color 0.15s;
+    overflow: hidden;
 }
 .ft-rule-item:hover {
     border-color: var(--accent-bg);
+}
+.ft-rule-item.ft-rule-editing {
+    border-color: var(--accent);
+}
+.ft-rule-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.55rem 0.75rem;
 }
 .ft-rule-content {
     display: flex;
@@ -2009,14 +1979,14 @@ body::before {
     flex-shrink: 0;
 }
 
-/* ── Learned rule edit mode ── */
+/* ── Rule actions (read mode) ── */
 .ft-rule-actions {
     display: flex;
     align-items: center;
     gap: 0.3rem;
     flex-shrink: 0;
 }
-.ft-btn-edit {
+.ft-btn-edit, .ft-btn-delete {
     background: none;
     border: none;
     color: var(--text-muted);
@@ -2030,50 +2000,141 @@ body::before {
     color: var(--accent);
     background: var(--accent-bg);
 }
-.ft-rule-edit-input {
+
+/* ── Expanded edit panel ── */
+.ft-rule-edit-panel {
+    display: none;
+    border-top: 1px solid var(--border-color);
+    padding: 0.75rem;
     background: var(--bg-body);
-    border: 1px solid var(--accent);
+}
+.ft-rule-editing .ft-rule-edit-panel {
+    display: block;
+}
+.ft-rule-edit-fields {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    margin-bottom: 0.6rem;
+    flex-wrap: wrap;
+}
+.ft-rule-edit-fields label {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    font-weight: 500;
+    white-space: nowrap;
+}
+.ft-rule-edit-input {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
     border-radius: 4px;
     color: var(--text-primary);
     font-family: 'JetBrains Mono', monospace;
     font-size: 0.78rem;
-    padding: 0.25rem 0.4rem;
-    min-width: 120px;
+    padding: 0.35rem 0.5rem;
     flex: 1;
+    min-width: 150px;
 }
 .ft-rule-edit-input:focus {
     outline: none;
+    border-color: var(--accent);
     box-shadow: 0 0 0 2px var(--accent-bg);
 }
-.ft-btn-save, .ft-btn-cancel {
-    background: none;
-    border: none;
-    cursor: pointer;
-    padding: 0.2rem;
-    border-radius: 4px;
-    display: flex;
-    align-items: center;
-}
-.ft-btn-save {
-    color: #4ade80;
-}
-.ft-btn-save:hover {
-    background: rgba(74,222,128,0.15);
-}
-.ft-btn-cancel {
-    color: #f87171;
-}
-.ft-btn-cancel:hover {
-    background: rgba(248,113,113,0.15);
-}
 .ft-rule-edit-cat {
-    background: var(--bg-body);
-    border: 1px solid var(--accent);
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
     border-radius: 4px;
     color: var(--text-primary);
     font-size: 0.78rem;
-    padding: 0.25rem 0.3rem;
+    padding: 0.35rem 0.4rem;
+}
+.ft-rule-edit-actions {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+}
+.ft-btn-save-rule {
+    background: rgba(74,222,128,0.12);
+    border: 1px solid rgba(74,222,128,0.4);
+    color: #4ade80;
+    border-radius: var(--radius-sm);
+    padding: 0.3rem 0.8rem;
+    cursor: pointer;
+    font-size: 0.78rem;
+    font-weight: 600;
+    transition: all 0.15s;
+}
+.ft-btn-save-rule:hover {
+    background: rgba(74,222,128,0.25);
+    border-color: #4ade80;
+}
+.ft-btn-cancel-rule {
+    background: none;
+    border: 1px solid var(--border-color);
+    color: var(--text-muted);
+    border-radius: var(--radius-sm);
+    padding: 0.3rem 0.8rem;
+    cursor: pointer;
+    font-size: 0.78rem;
+    transition: all 0.15s;
+}
+.ft-btn-cancel-rule:hover {
+    border-color: var(--text-muted);
+    color: var(--text-primary);
+}
+
+/* ── Transaction preview in edit panel ── */
+.ft-rule-preview {
+    margin-top: 0.6rem;
+    border-top: 1px dashed var(--border-color);
+    padding-top: 0.5rem;
+}
+.ft-rule-preview-title {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    margin-bottom: 0.35rem;
+    font-weight: 500;
+}
+.ft-rule-preview-list {
+    max-height: 180px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+}
+.ft-rule-preview-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.72rem;
+    padding: 0.2rem 0.4rem;
+    border-radius: 3px;
+    background: var(--bg-card);
+}
+.ft-rule-preview-row .ft-preview-month {
+    color: var(--text-muted);
+    font-size: 0.68rem;
+    min-width: 56px;
     flex-shrink: 0;
+}
+.ft-rule-preview-row .ft-preview-lib {
+    color: var(--text-secondary);
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.ft-rule-preview-row .ft-preview-amount {
+    color: var(--text-primary);
+    font-weight: 500;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem;
+    white-space: nowrap;
+}
+.ft-preview-none {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    font-style: italic;
 }
 
 /* ── Rules recap tabs (Fichiers tab) ── */

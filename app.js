@@ -2013,18 +2013,61 @@
         return applied;
     }
 
+    // ── Helper: find all matching unclassified DQ rows for a rule key (all months) ──
+    function findMatchingDqRows(ruleKey, sens) {
+        const defaultCat = sens === 'Encaissement' ? 'Autres revenus' : 'DIVERS';
+        return rawData.filter(r => {
+            if (r.sens !== sens || r.manualCategory || r.categorie !== defaultCat) return false;
+            const cleaned = cleanLibelleForLearning(normUpper(r.libelle));
+            return cleaned.includes(ruleKey) || ruleKey.includes(cleaned);
+        });
+    }
+
+    // ── Build transaction preview HTML ──
+    function buildPreviewHtml(ruleKey, sens) {
+        const rows = findMatchingDqRows(ruleKey, sens);
+        if (rows.length === 0) {
+            return '<p class="ft-preview-none">Aucune transaction correspondante à reclasser.</p>';
+        }
+        let html = '';
+        rows.forEach(r => {
+            const mk = getDqMonthKey(r);
+            const [y, m] = (mk || '--').split('-');
+            const monthLabel = mk ? new Date(+y, +m - 1).toLocaleDateString('fr-FR', { month: 'short', year: '2-digit' }) : '—';
+            html += `<div class="ft-rule-preview-row">
+                <span class="ft-preview-month">${monthLabel}</span>
+                <span class="ft-preview-lib" title="${escapeHtml(r.libelle)}">${escapeHtml(r.libelle)}</span>
+                <span class="ft-preview-amount">${formatCurrency(r.montant)}</span>
+            </div>`;
+        });
+        return html;
+    }
+
     // ── Learned Rules Rendering (in Data Quality tab) ──
     function renderLearnedRules() {
         const container = document.getElementById('ft-learned-rules');
         const clearBtn = document.getElementById('ft-clear-learned');
+        const validateAllBtn = document.getElementById('ft-validate-all');
+        const countEl = document.getElementById('dq-count-rules');
         if (!container) return;
         const entries = Object.entries(_learnedCache);
+        if (countEl) countEl.textContent = entries.length;
         if (entries.length === 0) {
             container.innerHTML = '<p class="ft-empty">Aucune règle apprise.</p>';
             if (clearBtn) clearBtn.style.display = 'none';
+            if (validateAllBtn) validateAllBtn.style.display = 'none';
             return;
         }
         if (clearBtn) clearBtn.style.display = '';
+
+        // Check total pending across all rules for "Tout valider" button
+        let totalPending = 0;
+        entries.forEach(([key, val]) => { totalPending += countMatchingDqRows(key, val.sens); });
+        if (validateAllBtn) {
+            validateAllBtn.style.display = totalPending > 0 ? '' : 'none';
+            validateAllBtn.textContent = `Tout valider (${totalPending})`;
+        }
+
         // Sort by date descending
         entries.sort((a, b) => (b[1].date || 0) - (a[1].date || 0));
         let html = '';
@@ -2035,105 +2078,90 @@
             const catOptions = cats.map(c =>
                 `<option value="${escapeHtml(c)}"${c === val.category ? ' selected' : ''}>${escapeHtml(c)}</option>`
             ).join('');
-            // Count matching unclassified transactions
             const matchCount = countMatchingDqRows(key, val.sens);
-            const confirmLabel = matchCount > 0
-                ? `Valider (${matchCount})`
-                : 'Validé';
-            const confirmDisabled = matchCount === 0 ? ' disabled' : '';
+            const matchBadge = matchCount > 0
+                ? `<span class="dq-count" style="font-size:0.68rem">${matchCount}</span>`
+                : '';
+
             html += `<div class="ft-rule-item" data-rule-key="${escapeHtml(key)}">
-                <div class="ft-rule-content">
-                    <span class="ft-rule-badge ${sensClass}">${sensLabel}</span>
-                    <span class="ft-rule-key" title="Mot-clé nettoyé (cliquez sur ✏️ pour modifier)">${escapeHtml(key)}</span>
-                    <input class="ft-rule-edit-input" style="display:none" value="${escapeHtml(key)}">
-                    <span class="ft-rule-arrow">→</span>
-                    <span class="ft-rule-cat">${escapeHtml(val.category)}</span>
-                    <select class="ft-rule-edit-cat" style="display:none">${catOptions}</select>
+                <div class="ft-rule-row">
+                    <div class="ft-rule-content">
+                        <span class="ft-rule-badge ${sensClass}">${sensLabel}</span>
+                        <span class="ft-rule-key">${escapeHtml(key)}</span>
+                        <span class="ft-rule-arrow">→</span>
+                        <span class="ft-rule-cat">${escapeHtml(val.category)}</span>
+                        ${matchBadge}
+                    </div>
+                    <div class="ft-rule-actions">
+                        <button class="ft-btn-edit" title="Modifier">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                        </button>
+                        <button class="ft-btn-delete" title="Supprimer">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                        </button>
+                    </div>
                 </div>
-                <div class="ft-rule-actions">
-                    <button class="ft-btn-confirm-rule${matchCount === 0 ? ' ft-btn-confirmed' : ''}"${confirmDisabled} title="Appliquer cette règle à toutes les transactions correspondantes">
-                        ${confirmLabel}
-                    </button>
-                    <button class="ft-btn-edit" title="Modifier cette règle">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-                    </button>
-                    <button class="ft-btn-save" style="display:none" title="Enregistrer">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
-                    </button>
-                    <button class="ft-btn-cancel" style="display:none" title="Annuler">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-                    </button>
-                    <button class="ft-btn-delete" title="Supprimer cette règle">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
-                    </button>
+                <div class="ft-rule-edit-panel">
+                    <div class="ft-rule-edit-fields">
+                        <label>Mot-clé :</label>
+                        <input class="ft-rule-edit-input" value="${escapeHtml(key)}">
+                        <label>Catégorie :</label>
+                        <select class="ft-rule-edit-cat">${catOptions}</select>
+                    </div>
+                    <div class="ft-rule-edit-actions">
+                        <button class="ft-btn-save-rule">Enregistrer</button>
+                        <button class="ft-btn-cancel-rule">Annuler</button>
+                    </div>
+                    <div class="ft-rule-preview">
+                        <div class="ft-rule-preview-title">Transactions concernées (tous mois) :</div>
+                        <div class="ft-rule-preview-list">${buildPreviewHtml(key, val.sens)}</div>
+                    </div>
                 </div>
             </div>`;
         });
         container.innerHTML = html;
 
-        // Wire edit/save/cancel/delete buttons
+        // Wire all rule items
         container.querySelectorAll('.ft-rule-item').forEach(item => {
             const ruleKey = item.dataset.ruleKey;
-            const keySpan = item.querySelector('.ft-rule-key');
-            const keyInput = item.querySelector('.ft-rule-edit-input');
-            const catSpan = item.querySelector('.ft-rule-cat');
-            const catSelect = item.querySelector('.ft-rule-edit-cat');
             const btnEdit = item.querySelector('.ft-btn-edit');
-            const btnSave = item.querySelector('.ft-btn-save');
-            const btnCancel = item.querySelector('.ft-btn-cancel');
             const btnDelete = item.querySelector('.ft-btn-delete');
-            const btnConfirm = item.querySelector('.ft-btn-confirm-rule');
+            const btnSave = item.querySelector('.ft-btn-save-rule');
+            const btnCancel = item.querySelector('.ft-btn-cancel-rule');
+            const keyInput = item.querySelector('.ft-rule-edit-input');
+            const catSelect = item.querySelector('.ft-rule-edit-cat');
+            const previewList = item.querySelector('.ft-rule-preview-list');
 
-            // Confirm/validate rule: apply to all matching DQ rows
-            if (btnConfirm && !btnConfirm.disabled) {
-                btnConfirm.addEventListener('click', async () => {
-                    const val = _learnedCache[ruleKey];
-                    if (!val) return;
-                    const count = applyRuleToDqRows(ruleKey, val);
-                    if (count > 0) {
-                        await saveToStorage();
-                        computeFilteredData();
-                        renderDataQuality();
-                        renderLearnedRules();
-                        refreshDashboard();
-                    }
+            btnEdit.addEventListener('click', () => {
+                // Close any other open panels
+                container.querySelectorAll('.ft-rule-item.ft-rule-editing').forEach(other => {
+                    other.classList.remove('ft-rule-editing');
                 });
-            }
-
-            function enterEditMode() {
-                keySpan.style.display = 'none';
-                catSpan.style.display = 'none';
-                item.querySelector('.ft-rule-arrow').style.display = 'none';
-                keyInput.style.display = '';
-                catSelect.style.display = '';
-                btnEdit.style.display = 'none';
-                btnConfirm.style.display = 'none';
-                btnSave.style.display = '';
-                btnCancel.style.display = '';
-                btnDelete.style.display = 'none';
+                item.classList.add('ft-rule-editing');
                 keyInput.focus();
-            }
+                keyInput.select();
+            });
 
-            function exitEditMode() {
-                keySpan.style.display = '';
-                catSpan.style.display = '';
-                item.querySelector('.ft-rule-arrow').style.display = '';
-                keyInput.style.display = 'none';
-                catSelect.style.display = 'none';
-                btnEdit.style.display = '';
-                btnConfirm.style.display = '';
-                btnSave.style.display = 'none';
-                btnCancel.style.display = 'none';
-                btnDelete.style.display = '';
+            btnCancel.addEventListener('click', () => {
+                item.classList.remove('ft-rule-editing');
                 keyInput.value = ruleKey;
                 catSelect.value = _learnedCache[ruleKey]?.category || '';
-            }
+            });
 
-            btnEdit.addEventListener('click', enterEditMode);
-            btnCancel.addEventListener('click', exitEditMode);
             keyInput.addEventListener('keydown', (e) => {
-                if (e.key === 'Escape') exitEditMode();
+                if (e.key === 'Escape') btnCancel.click();
                 if (e.key === 'Enter') btnSave.click();
+            });
+
+            // Live preview update as user types
+            keyInput.addEventListener('input', () => {
+                const testKey = keyInput.value.trim().toUpperCase();
+                const sens = _learnedCache[ruleKey]?.sens || 'Encaissement';
+                if (testKey.length >= 2) {
+                    previewList.innerHTML = buildPreviewHtml(testKey, sens);
+                } else {
+                    previewList.innerHTML = '<p class="ft-preview-none">Saisissez au moins 2 caractères.</p>';
+                }
             });
 
             btnSave.addEventListener('click', async () => {
@@ -2142,13 +2170,11 @@
                 if (newKey.length < 2) return;
                 const oldVal = _learnedCache[ruleKey];
                 if (!oldVal) return;
-                // Delete old key if it changed
-                if (newKey !== ruleKey) {
-                    delete _learnedCache[ruleKey];
-                }
+                if (newKey !== ruleKey) delete _learnedCache[ruleKey];
                 _learnedCache[newKey] = { ...oldVal, category: newCat, date: Date.now() };
                 await saveLearnedCategories();
-                // Re-categorize and refresh everything
+                // Apply to matching rows and refresh
+                applyRuleToDqRows(newKey, _learnedCache[newKey]);
                 categorizeAll(rawData);
                 await saveToStorage();
                 computeFilteredData();
@@ -2167,9 +2193,26 @@
                 refreshDashboard();
             });
         });
+
         // Also refresh the recap in Fichiers tab if visible
         renderRulesRecap();
     }
+
+    // ── "Tout valider" global button ──
+    document.getElementById('ft-validate-all').addEventListener('click', async () => {
+        const entries = Object.entries(_learnedCache);
+        let totalApplied = 0;
+        for (const [key, val] of entries) {
+            totalApplied += applyRuleToDqRows(key, val);
+        }
+        if (totalApplied > 0) {
+            await saveToStorage();
+            computeFilteredData();
+            renderDataQuality();
+            renderLearnedRules();
+            refreshDashboard();
+        }
+    });
 
     // Clear all learned rules
     document.getElementById('ft-clear-learned').addEventListener('click', async () => {
@@ -2658,6 +2701,12 @@ Réponds UNIQUEMENT en JSON valide (pas de markdown), sous forme d'un tableau :
                 learnEntries.push({ libelle: row.libelle, category: cat, sens: row.sens });
             });
             await learnCategoryBatch(learnEntries);
+            // Auto-validate: apply new rules to ALL matching unclassified rows
+            for (const { libelle, category, sens } of learnEntries) {
+                const ruleKey = cleanLibelleForLearning(libelle);
+                if (ruleKey.length < 3) continue;
+                applyRuleToDqRows(ruleKey, { category, sens });
+            }
             await saveToStorage();
             computeFilteredData();
             renderDataQuality();
