@@ -2045,6 +2045,8 @@
 
     // ── Learned Rules Rendering (in Data Quality tab) ──
     function renderLearnedRules() {
+        wireValidateAll();
+        wireClearLearned();
         const container = document.getElementById('ft-learned-rules');
         const clearBtn = document.getElementById('ft-clear-learned');
         const validateAllBtn = document.getElementById('ft-validate-all');
@@ -2198,34 +2200,48 @@
         renderRulesRecap();
     }
 
-    // ── "Tout valider" global button ──
-    document.getElementById('ft-validate-all').addEventListener('click', async () => {
-        const entries = Object.entries(_learnedCache);
-        let totalApplied = 0;
-        for (const [key, val] of entries) {
-            totalApplied += applyRuleToDqRows(key, val);
-        }
-        if (totalApplied > 0) {
+    // ── "Tout valider" global button (wired once after DOM ready) ──
+    let _validateAllWired = false;
+    function wireValidateAll() {
+        if (_validateAllWired) return;
+        const btn = document.getElementById('ft-validate-all');
+        if (!btn) return;
+        _validateAllWired = true;
+        btn.addEventListener('click', async () => {
+            const entries = Object.entries(_learnedCache);
+            let totalApplied = 0;
+            for (const [key, val] of entries) {
+                totalApplied += applyRuleToDqRows(key, val);
+            }
+            if (totalApplied > 0) {
+                await saveToStorage();
+                computeFilteredData();
+                renderDataQuality();
+                renderLearnedRules();
+                refreshDashboard();
+            }
+        });
+    }
+
+    // Clear all learned rules (wired once after DOM ready)
+    let _clearLearnedWired = false;
+    function wireClearLearned() {
+        if (_clearLearnedWired) return;
+        const btn = document.getElementById('ft-clear-learned');
+        if (!btn) return;
+        _clearLearnedWired = true;
+        btn.addEventListener('click', async () => {
+            if (!confirm('Supprimer toutes les règles apprises ?')) return;
+            _learnedCache = {};
+            await saveLearnedCategories();
+            categorizeAll(rawData);
             await saveToStorage();
             computeFilteredData();
             renderDataQuality();
             renderLearnedRules();
             refreshDashboard();
-        }
-    });
-
-    // Clear all learned rules
-    document.getElementById('ft-clear-learned').addEventListener('click', async () => {
-        if (!confirm('Supprimer toutes les règles apprises ?')) return;
-        _learnedCache = {};
-        await saveLearnedCategories();
-        categorizeAll(rawData);
-        await saveToStorage();
-        computeFilteredData();
-        renderDataQuality();
-        renderLearnedRules();
-        refreshDashboard();
-    });
+        });
+    }
 
     // ── Auto-load from IndexedDB on startup ──
     (async function autoLoad() {

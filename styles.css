@@ -2006,7 +2006,7 @@ body::before {
     display: none;
     border-top: 1px solid var(--border-color);
     padding: 0.75rem;
-    background: var(--bg-body);
+    background: var(--bg-secondary);
 }
 .ft-rule-editing .ft-rule-edit-panel {
     display: block;
@@ -2228,7 +2228,7 @@ body::before {
     display: flex;
 }
 .ft-builtin-kw {
-    background: var(--bg-body);
+    background: var(--bg-secondary);
     border: 1px solid var(--border-color);
     border-radius: 3px;
     color: var(--text-secondary);
