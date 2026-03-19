@@ -2728,6 +2728,9 @@ Réponds UNIQUEMENT en JSON valide (pas de markdown), sous forme d'un tableau :
         _dqCollapsibleWired = true;
     }
 
+    const DQ_PAGE_SIZE = 25;
+    const _dqPageState = {};
+
     function renderDqTable(tbodyId, rows, categories, bulkBtnId, suggestBtnId) {
         const tbody = document.getElementById(tbodyId);
         const bulkBtn = document.getElementById(bulkBtnId);
@@ -2735,10 +2738,22 @@ Réponds UNIQUEMENT en JSON valide (pas de markdown), sous forme d'un tableau :
         if (rows.length === 0) {
             tbody.innerHTML = `<tr><td colspan="5" class="dq-empty">Aucune transaction à reclasser.</td></tr>`;
             bulkBtn.disabled = true;
+            // Remove any existing pagination
+            const existingPag = tbody.closest('.dq-section-body').querySelector('.dq-pagination');
+            if (existingPag) existingPag.remove();
             return;
         }
+
+        // Init page state
+        if (!_dqPageState[tbodyId]) _dqPageState[tbodyId] = 0;
+        const totalPages = Math.ceil(rows.length / DQ_PAGE_SIZE);
+        if (_dqPageState[tbodyId] >= totalPages) _dqPageState[tbodyId] = totalPages - 1;
+        const currentPage = _dqPageState[tbodyId];
+        const startIdx = currentPage * DQ_PAGE_SIZE;
+        const pageRows = rows.slice(startIdx, startIdx + DQ_PAGE_SIZE);
+
         tbody.innerHTML = '';
-        rows.forEach((row, i) => {
+        pageRows.forEach((row, i) => {
             const tr = document.createElement('tr');
             const idx = rawData.indexOf(row);
 
@@ -2774,6 +2789,36 @@ Réponds UNIQUEMENT en JSON valide (pas de markdown), sous forme d'un tableau :
             }
         });
 
+        // ── Pagination controls ──
+        const sectionBody = tbody.closest('.dq-section-body');
+        let pagEl = sectionBody.querySelector('.dq-pagination');
+        if (!pagEl) {
+            pagEl = document.createElement('div');
+            pagEl.className = 'dq-pagination';
+            sectionBody.appendChild(pagEl);
+        }
+        if (totalPages <= 1) {
+            pagEl.innerHTML = '';
+        } else {
+            const from = startIdx + 1;
+            const to = Math.min(startIdx + DQ_PAGE_SIZE, rows.length);
+            pagEl.innerHTML = `
+                <button class="dq-pag-btn" data-dir="prev" ${currentPage === 0 ? 'disabled' : ''}>&lsaquo; Préc.</button>
+                <span class="dq-pag-info">${from}–${to} sur ${rows.length}</span>
+                <button class="dq-pag-btn" data-dir="next" ${currentPage >= totalPages - 1 ? 'disabled' : ''}>Suiv. &rsaquo;</button>
+            `;
+            pagEl.querySelectorAll('.dq-pag-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    if (btn.dataset.dir === 'prev' && _dqPageState[tbodyId] > 0) {
+                        _dqPageState[tbodyId]--;
+                    } else if (btn.dataset.dir === 'next' && _dqPageState[tbodyId] < totalPages - 1) {
+                        _dqPageState[tbodyId]++;
+                    }
+                    renderDqTable(tbodyId, rows, categories, bulkBtnId, suggestBtnId);
+                });
+            });
+        }
+
         function updateBulkBtn() {
             const anyFilled = tbody.querySelector('.dq-select') &&
                 [...tbody.querySelectorAll('.dq-select')].some(s => s.value);
@@ -2784,17 +2829,17 @@ Réponds UNIQUEMENT en JSON valide (pas de markdown), sous forme d'un tableau :
             sel.addEventListener('change', updateBulkBtn);
         });
 
-        // Bulk suggest all via Claude API (batched)
+        // Bulk suggest all via Claude API (batched) — current page only
         suggestBtn.onclick = async () => {
             if (!getDqApiKey()) return;
             suggestBtn.disabled = true;
             const trs = tbody.querySelectorAll('tr');
-            await suggestBatch([...trs], rows, categories, suggestBtn);
+            await suggestBatch([...trs], pageRows, categories, suggestBtn);
             suggestBtn.textContent = 'Suggérer tout (IA)';
             suggestBtn.disabled = !getDqApiKey();
         };
 
-        // Bulk apply all selected categories
+        // Bulk apply all selected categories (current page)
         bulkBtn.onclick = async () => {
             const selects = tbody.querySelectorAll('.dq-select');
             const toApply = [];

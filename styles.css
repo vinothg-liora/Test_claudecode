@@ -1347,7 +1347,6 @@ body::before {
     flex-shrink: 0;
 }
 .dq-section-body {
-    max-height: 500px;
     overflow-y: auto;
 }
 .dq-section-body .dq-table thead th {
@@ -1355,6 +1354,36 @@ body::before {
     top: 0;
     background: var(--bg-card);
     z-index: 1;
+}
+/* DQ Pagination */
+.dq-pagination {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem;
+    padding: 0.6rem 0;
+    border-top: 1px solid var(--border);
+}
+.dq-pag-btn {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.3rem 0.75rem;
+    font-size: 0.8rem;
+    color: var(--text);
+    cursor: pointer;
+    transition: background 0.15s;
+}
+.dq-pag-btn:hover:not(:disabled) {
+    background: var(--bg-hover, rgba(99,102,241,0.08));
+}
+.dq-pag-btn:disabled {
+    opacity: 0.35;
+    cursor: default;
+}
+.dq-pag-info {
+    font-size: 0.78rem;
+    color: var(--text-muted);
 }
 .dq-collapsible.dq-collapsed .dq-chevron {
     transform: rotate(-90deg);
