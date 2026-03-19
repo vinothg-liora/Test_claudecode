@@ -2695,6 +2695,7 @@ Réponds UNIQUEMENT en JSON valide (pas de markdown), sous forme d'un tableau :
         renderDqTable('dq-body-autres', autresRows, ENC_CATEGORIES, 'dq-bulk-autres', 'dq-suggest-autres');
         updateSuggestButtons();
         wireDqCollapsible();
+        renderLearnedRules();
     }
 
     // Month filter is now driven by button clicks (toggleDqMonth, dq-select-all, dq-select-none)
