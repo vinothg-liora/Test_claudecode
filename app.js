@@ -2931,14 +2931,52 @@ Réponds UNIQUEMENT en JSON valide (pas de markdown), sous forme d'un tableau :
         const n = histMonths.length;
         if (n === 0) return { futureKeys, enc: [], dec: [], encDetail: {}, decDetail: {} };
 
+        // Compute overall monthly totals for seasonal index
+        const monthlyEncTotals = {};
+        const monthlyDecTotals = {};
+        rawData.forEach(r => {
+            const mk = getMonthKey(r);
+            if (!mk) return;
+            if (r.montant > 0) monthlyEncTotals[mk] = (monthlyEncTotals[mk] || 0) + r.montant;
+            else monthlyDecTotals[mk] = (monthlyDecTotals[mk] || 0) + Math.abs(r.montant);
+        });
+
+        // Compute seasonal indices by calendar month (1-12)
+        // Group historical values by calendar month, then index = avg(month) / avg(all)
+        function computeSeasonalIndices(monthlyTotals) {
+            const byCalMonth = {};  // { 1: [val, val], 2: [...], ... }
+            let allSum = 0, allCount = 0;
+            histMonths.forEach(mk => {
+                const calMonth = parseInt(mk.split('-')[1]);
+                const val = monthlyTotals[mk] || 0;
+                if (!byCalMonth[calMonth]) byCalMonth[calMonth] = [];
+                byCalMonth[calMonth].push(val);
+                allSum += val;
+                allCount++;
+            });
+            const globalAvg = allCount > 0 ? allSum / allCount : 1;
+            const indices = {};
+            for (let m = 1; m <= 12; m++) {
+                if (byCalMonth[m] && byCalMonth[m].length > 0) {
+                    const monthAvg = byCalMonth[m].reduce((s, v) => s + v, 0) / byCalMonth[m].length;
+                    indices[m] = globalAvg > 0 ? monthAvg / globalAvg : 1;
+                } else {
+                    indices[m] = 1; // no data for this month, assume average
+                }
+            }
+            return indices;
+        }
+
+        const encSeasonalIdx = computeSeasonalIndices(monthlyEncTotals);
+        const decSeasonalIdx = computeSeasonalIndices(monthlyDecTotals);
+
+        // Median by category (baseline)
         function medianByCat(sens) {
             const catMap = getMonthlyByCat(sens);
             const result = {};
             for (const cat in catMap) {
                 const vals = histMonths.map(mk => catMap[cat][mk] || 0);
-                // Use last 6 months if available
                 const recent = vals.slice(-6);
-                // Filter out zero-only categories
                 if (recent.every(v => v === 0)) continue;
                 const sorted = [...recent].filter(v => v > 0).sort((a, b) => a - b);
                 if (sorted.length === 0) { result[cat] = 0; continue; }
@@ -2951,10 +2989,30 @@ Réponds UNIQUEMENT en JSON valide (pas de markdown), sous forme d'un tableau :
         const encMedians = medianByCat('Encaissement');
         const decMedians = medianByCat('Décaissement');
 
-        const enc = futureKeys.map(() => Object.values(encMedians).reduce((s, v) => s + v, 0));
-        const dec = futureKeys.map(() => Object.values(decMedians).reduce((s, v) => s + v, 0));
+        const baseEnc = Object.values(encMedians).reduce((s, v) => s + v, 0);
+        const baseDec = Object.values(decMedians).reduce((s, v) => s + v, 0);
 
-        return { futureKeys, enc, dec, encDetail: encMedians, decDetail: decMedians };
+        // Apply seasonal index per future month
+        const enc = [];
+        const dec = [];
+        const encDetails = [];
+        const decDetails = [];
+        futureKeys.forEach(mk => {
+            const calMonth = parseInt(mk.split('-')[1]);
+            const encIdx = encSeasonalIdx[calMonth] || 1;
+            const decIdx = decSeasonalIdx[calMonth] || 1;
+            enc.push(baseEnc * encIdx);
+            dec.push(baseDec * decIdx);
+            // Per-category detail adjusted by seasonal index
+            const ed = {};
+            for (const cat in encMedians) ed[cat] = encMedians[cat] * encIdx;
+            encDetails.push(ed);
+            const dd = {};
+            for (const cat in decMedians) dd[cat] = decMedians[cat] * decIdx;
+            decDetails.push(dd);
+        });
+
+        return { futureKeys, enc, dec, encDetail: encDetails, decDetail: decDetails };
     }
 
     // ── MODEL 2: Weighted Moving Average ──
@@ -3004,8 +3062,8 @@ Réponds UNIQUEMENT en JSON valide (pas de markdown), sous forme d'un tableau :
 
         const encWma = wma(monthlyEnc, 6);
         const decWma = wma(monthlyDec, 6);
-        const encDetail = wmaByCat('Encaissement');
-        const decDetail = wmaByCat('Décaissement');
+        const encBaseCats = wmaByCat('Encaissement');
+        const decBaseCats = wmaByCat('Décaissement');
 
         // Apply slight trend: compute growth rate from last 3 vs previous 3
         function trend(series) {
@@ -3017,7 +3075,6 @@ Réponds UNIQUEMENT en JSON valide (pas de markdown), sous forme d'un tableau :
             const prevAvg = prev3.reduce((s, v) => s + v, 0) / prev3.length;
             if (prevAvg === 0) return 1;
             const growth = recent3 / prevAvg;
-            // Cap between 0.8 and 1.2 to avoid wild projections
             return Math.max(0.8, Math.min(1.2, growth));
         }
 
@@ -3026,9 +3083,19 @@ Réponds UNIQUEMENT en JSON valide (pas de markdown), sous forme d'un tableau :
 
         const enc = [];
         const dec = [];
+        const encDetail = [];
+        const decDetail = [];
         for (let i = 0; i < SIM_MONTHS_AHEAD; i++) {
-            enc.push(encWma * Math.pow(encTrend, i));
-            dec.push(decWma * Math.pow(decTrend, i));
+            const encFactor = Math.pow(encTrend, i);
+            const decFactor = Math.pow(decTrend, i);
+            enc.push(encWma * encFactor);
+            dec.push(decWma * decFactor);
+            const ed = {};
+            for (const cat in encBaseCats) ed[cat] = encBaseCats[cat] * encFactor;
+            encDetail.push(ed);
+            const dd = {};
+            for (const cat in decBaseCats) dd[cat] = decBaseCats[cat] * decFactor;
+            decDetail.push(dd);
         }
 
         return { futureKeys, enc, dec, encDetail, decDetail };
@@ -3155,16 +3222,20 @@ Réponds UNIQUEMENT en JSON valide (pas de markdown), sous forme d'un tableau :
         const tbody = document.getElementById('sim-proj-tbody');
         thead.innerHTML = `<tr><th>Catégorie</th>${futureKeys.map(k => `<th class="text-right">${monthKeyToLabel(k)}</th>`).join('')}<th class="text-right">Total</th></tr>`;
 
+        // Collect all category names from detail arrays
+        const encCats = new Set();
+        const decCats = new Set();
+        proj.encDetail.forEach(d => Object.keys(d).forEach(c => encCats.add(c)));
+        proj.decDetail.forEach(d => Object.keys(d).forEach(c => decCats.add(c)));
+
         let rows = '';
         // Enc detail
         rows += `<tr class="sim-section-row"><td colspan="${futureKeys.length + 2}">Encaissements</td></tr>`;
-        for (const cat in proj.encDetail) {
-            const val = proj.encDetail[cat];
-            if (val === 0) continue;
+        for (const cat of encCats) {
             rows += `<tr><td>${escapeHtml(cat)}</td>`;
             let total = 0;
             futureKeys.forEach((_, i) => {
-                const v = simActiveModel === 'wma' ? val * Math.pow(1, i) : val;
+                const v = proj.encDetail[i][cat] || 0;
                 total += v;
                 rows += `<td class="text-right">${formatCurrency(v)}</td>`;
             });
@@ -3174,13 +3245,11 @@ Réponds UNIQUEMENT en JSON valide (pas de markdown), sous forme d'un tableau :
 
         // Dec detail
         rows += `<tr class="sim-section-row"><td colspan="${futureKeys.length + 2}">Décaissements</td></tr>`;
-        for (const cat in proj.decDetail) {
-            const val = proj.decDetail[cat];
-            if (val === 0) continue;
+        for (const cat of decCats) {
             rows += `<tr><td>${escapeHtml(cat)}</td>`;
             let total = 0;
             futureKeys.forEach((_, i) => {
-                const v = simActiveModel === 'wma' ? val * Math.pow(1, i) : val;
+                const v = proj.decDetail[i][cat] || 0;
                 total += v;
                 rows += `<td class="text-right">${formatCurrency(-v)}</td>`;
             });
@@ -3199,7 +3268,7 @@ Réponds UNIQUEMENT en JSON valide (pas de markdown), sous forme d'un tableau :
 
     // ── Model explanations ──
     const MODEL_EXPLANATIONS = {
-        seasonal: `<strong>Modèle saisonnier</strong> — Ce modèle projette chaque catégorie en calculant la <em>médiane</em> des 6 derniers mois d'historique. Il capture le niveau « normal » de chaque poste en éliminant les valeurs extrêmes. <br><span class="sim-explain-tip">Interprétation : les projections représentent un scénario stable, sans tendance haussière ni baissière. Idéal quand votre activité est relativement constante d'un mois à l'autre.</span>`,
+        seasonal: `<strong>Modèle saisonnier</strong> — Ce modèle calcule la <em>médiane</em> de chaque catégorie sur les 6 derniers mois, puis applique un <em>coefficient saisonnier</em> par mois calendaire. Ce coefficient est calculé en comparant la moyenne historique de chaque mois (janvier, février…) à la moyenne globale. <br><span class="sim-explain-tip">Interprétation : les montants projetés varient d'un mois à l'autre selon la saisonnalité observée dans vos données. Un mois historiquement fort (ex. septembre) aura un coefficient &gt; 1, un mois faible (ex. août) un coefficient &lt; 1. Plus vous avez de mois d'historique, plus la saisonnalité est fiable.</span>`,
         wma: `<strong>Moyennes mobiles pondérées</strong> — Ce modèle calcule une moyenne pondérée sur 6 mois (les mois récents pèsent davantage) et intègre la <em>tendance</em> observée entre les 3 derniers mois et les 3 précédents. <br><span class="sim-explain-tip">Interprétation : les projections reflètent la dynamique récente de votre trésorerie. Si vos revenus augmentent, la projection prolonge cette tendance (plafonnée à ±20% par mois). Préférez ce modèle si votre activité est en croissance ou en déclin.</span>`
     };
 
