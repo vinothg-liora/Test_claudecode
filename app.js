@@ -2053,11 +2053,17 @@
         const validateAllBtn = document.getElementById('ft-validate-all');
         const countEl = document.getElementById('dq-count-rules');
         if (!container) return;
-        const entries = Object.entries(_learnedCache);
+        const allEntries = Object.entries(_learnedCache);
+
+        // In DQ tab: only show rules that still have pending (unclassified) transactions
+        const entries = allEntries.filter(([key, val]) => countMatchingDqRows(key, val.sens) > 0);
+
         if (countEl) countEl.textContent = entries.length;
         if (entries.length === 0) {
-            container.innerHTML = '<p class="ft-empty">Aucune règle apprise.</p>';
-            if (clearBtn) clearBtn.style.display = 'none';
+            container.innerHTML = allEntries.length > 0
+                ? '<p class="ft-empty">Toutes les règles sont appliquées. Gérez vos règles dans l\'onglet Fichiers.</p>'
+                : '<p class="ft-empty">Aucune règle apprise.</p>';
+            if (clearBtn) clearBtn.style.display = allEntries.length > 0 ? '' : 'none';
             if (validateAllBtn) validateAllBtn.style.display = 'none';
             return;
         }
