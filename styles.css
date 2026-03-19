@@ -2137,6 +2137,67 @@ body::before {
     font-style: italic;
 }
 
+/* ── Collapsible rule groups (Enc / Déc) ── */
+.ft-rules-group {
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+}
+.ft-rules-group + .ft-rules-group {
+    margin-top: 0.5rem;
+}
+.ft-rules-group-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    cursor: pointer;
+    user-select: none;
+    font-size: 0.8rem;
+    font-weight: 600;
+    transition: background 0.15s;
+}
+.ft-rules-group-header:hover {
+    filter: brightness(1.15);
+}
+.ft-group-enc {
+    background: rgba(74,222,128,0.08);
+    color: #4ade80;
+    border-bottom: 1px solid rgba(74,222,128,0.15);
+}
+.ft-group-dec {
+    background: rgba(248,113,113,0.08);
+    color: #f87171;
+    border-bottom: 1px solid rgba(248,113,113,0.15);
+}
+.ft-group-chevron {
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+}
+.ft-group-label {
+    flex: 1;
+}
+.ft-rules-group-body {
+    display: flex;
+    flex-direction: column;
+}
+.ft-rules-group-body .ft-rule-item {
+    border-radius: 0;
+    border-left: none;
+    border-right: none;
+    border-top: none;
+}
+.ft-rules-group-body .ft-rule-item:last-child {
+    border-bottom: none;
+}
+.ft-group-collapsed .ft-rules-group-body {
+    display: none;
+}
+.ft-group-collapsed .ft-rules-group-header {
+    border-bottom: none;
+}
+
 /* ── Rules recap tabs (Fichiers tab) ── */
 .ft-rules-tabs {
     display: flex;

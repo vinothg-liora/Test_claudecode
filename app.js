@@ -507,6 +507,7 @@
             const learnedCat = findLearnedCategory(libNorm, row.sens);
             if (learnedCat) {
                 row.categorie = learnedCat;
+                row.manualCategory = learnedCat;
                 row.ruleHit = 'Apprentissage automatique';
                 return;
             }
@@ -2072,10 +2073,12 @@
 
         // Sort by date descending
         entries.sort((a, b) => (b[1].date || 0) - (a[1].date || 0));
-        let html = '';
-        entries.forEach(([key, val]) => {
-            const sensLabel = val.sens === 'Encaissement' ? 'Enc.' : 'Déc.';
-            const sensClass = val.sens === 'Encaissement' ? 'ft-rule-enc' : 'ft-rule-dec';
+
+        // Split into Enc / Déc groups
+        const encEntries = entries.filter(([, v]) => v.sens === 'Encaissement');
+        const decEntries = entries.filter(([, v]) => v.sens === 'Décaissement');
+
+        function buildRuleItemHtml(key, val) {
             const cats = val.sens === 'Encaissement' ? ENC_CATEGORIES : DEC_CATEGORIES;
             const catOptions = cats.map(c =>
                 `<option value="${escapeHtml(c)}"${c === val.category ? ' selected' : ''}>${escapeHtml(c)}</option>`
@@ -2084,11 +2087,9 @@
             const matchBadge = matchCount > 0
                 ? `<span class="dq-count" style="font-size:0.68rem">${matchCount}</span>`
                 : '';
-
-            html += `<div class="ft-rule-item" data-rule-key="${escapeHtml(key)}">
+            return `<div class="ft-rule-item" data-rule-key="${escapeHtml(key)}">
                 <div class="ft-rule-row">
                     <div class="ft-rule-content">
-                        <span class="ft-rule-badge ${sensClass}">${sensLabel}</span>
                         <span class="ft-rule-key">${escapeHtml(key)}</span>
                         <span class="ft-rule-arrow">→</span>
                         <span class="ft-rule-cat">${escapeHtml(val.category)}</span>
@@ -2120,8 +2121,45 @@
                     </div>
                 </div>
             </div>`;
-        });
+        }
+
+        function buildGroupHtml(label, cssClass, groupEntries, groupId) {
+            if (groupEntries.length === 0) return '';
+            const collapsed = _rulesGroupCollapsed[groupId] ? ' ft-group-collapsed' : '';
+            const chevron = _rulesGroupCollapsed[groupId]
+                ? '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>'
+                : '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>';
+            let html = `<div class="ft-rules-group${collapsed}" data-group-id="${groupId}">
+                <div class="ft-rules-group-header ${cssClass}">
+                    <span class="ft-group-chevron">${chevron}</span>
+                    <span class="ft-group-label">${label}</span>
+                    <span class="dq-count" style="font-size:0.68rem">${groupEntries.length}</span>
+                </div>
+                <div class="ft-rules-group-body">`;
+            groupEntries.forEach(([key, val]) => { html += buildRuleItemHtml(key, val); });
+            html += '</div></div>';
+            return html;
+        }
+
+        let html = '';
+        html += buildGroupHtml('Encaissements', 'ft-group-enc', encEntries, 'enc');
+        html += buildGroupHtml('Décaissements', 'ft-group-dec', decEntries, 'dec');
         container.innerHTML = html;
+
+        // Wire group collapse/expand
+        container.querySelectorAll('.ft-rules-group-header').forEach(header => {
+            header.addEventListener('click', () => {
+                const group = header.closest('.ft-rules-group');
+                const groupId = group.dataset.groupId;
+                group.classList.toggle('ft-group-collapsed');
+                _rulesGroupCollapsed[groupId] = group.classList.contains('ft-group-collapsed');
+                // Update chevron
+                const chevronEl = header.querySelector('.ft-group-chevron');
+                chevronEl.innerHTML = _rulesGroupCollapsed[groupId]
+                    ? '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>'
+                    : '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>';
+            });
+        });
 
         // Wire all rule items
         container.querySelectorAll('.ft-rule-item').forEach(item => {
@@ -2199,6 +2237,9 @@
         // Also refresh the recap in Fichiers tab if visible
         renderRulesRecap();
     }
+
+    // ── Rules group collapse state ──
+    const _rulesGroupCollapsed = {};
 
     // ── "Tout valider" global button (wired once after DOM ready) ──
     let _validateAllWired = false;
