@@ -2651,6 +2651,9 @@ Réponds UNIQUEMENT en JSON valide (pas de markdown), sous forme d'un tableau :
     }
 
     function renderDataQuality() {
+        // Re-apply learned rules to ensure all months reflect latest rules
+        categorizeAll(rawData);
+
         const allDivers = rawData.filter(r => r.sens === 'Décaissement' && r.categorie === 'DIVERS' && !r.manualCategory);
         const allAutres = rawData.filter(r => r.sens === 'Encaissement' && r.categorie === 'Autres revenus' && !r.manualCategory);
 
