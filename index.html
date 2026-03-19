@@ -92,6 +92,7 @@
             <div class="nav-tabs">
                 <button class="nav-tab active" data-tab="dashboard">Tableau de bord</button>
                 <button class="nav-tab" data-tab="dataquality">Data Quality</button>
+                <button class="nav-tab" data-tab="projection">Projection</button>
                 <button class="nav-tab" data-tab="simulation">Simulation</button>
                 <button class="nav-tab" data-tab="fichiers">Fichiers</button>
             </div>
@@ -465,11 +466,9 @@
         </div>
         </div><!-- /tab-dataquality -->
 
-        <!-- TAB: Simulation -->
-        <div class="tab-content" id="tab-simulation">
+        <!-- TAB: Projection -->
+        <div class="tab-content" id="tab-projection">
         <div class="dashboard-content">
-
-            <!-- ═══ VOLET 1 : Projection ═══ -->
             <div class="sim-panel">
                 <div class="sim-panel-header">
                     <h2>Projection de trésorerie (3 mois)</h2>
@@ -477,9 +476,12 @@
                 </div>
 
                 <div class="sim-toggle-bar">
-                    <button class="sim-model-btn active" data-model="recurring">Modèle récurrent</button>
+                    <button class="sim-model-btn active" data-model="seasonal">Modèle saisonnier</button>
                     <button class="sim-model-btn" data-model="wma">Moyennes mobiles pondérées</button>
                 </div>
+
+                <!-- Model explanation -->
+                <div class="sim-model-explain" id="sim-model-explain"></div>
 
                 <!-- KPI résumé projection -->
                 <div class="sim-kpi-row" id="sim-proj-kpis">
@@ -510,12 +512,16 @@
                     </table>
                 </div>
             </div>
+        </div>
+        </div><!-- /tab-projection -->
 
-            <!-- ═══ VOLET 2 : Simulation manuelle ═══ -->
+        <!-- TAB: Simulation -->
+        <div class="tab-content" id="tab-simulation">
+        <div class="dashboard-content">
             <div class="sim-panel">
                 <div class="sim-panel-header">
                     <h2>Simulation de trésorerie</h2>
-                    <p class="sim-subtitle">Ajustez les paramètres pour simuler différents scénarios sur 3 mois.</p>
+                    <p class="sim-subtitle">Ajustez les paramètres pour simuler différents scénarios sur 3 mois. Les valeurs sont pré-remplies à partir de vos moyennes historiques.</p>
                 </div>
 
                 <!-- Solde initial -->
@@ -578,7 +584,6 @@
                     </table>
                 </div>
             </div>
-
         </div>
         </div><!-- /tab-simulation -->
 

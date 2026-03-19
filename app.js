@@ -2334,6 +2334,7 @@
             const target = document.getElementById('tab-' + btn.dataset.tab);
             if (target) target.classList.add('active');
             if (btn.dataset.tab === 'dataquality') { renderDataQuality(); renderLearnedRules(); }
+            if (btn.dataset.tab === 'projection') renderProjectionTab();
             if (btn.dataset.tab === 'simulation') renderSimulationTab();
             if (btn.dataset.tab === 'fichiers') { renderFileHistory(); renderRulesRecap(); }
         });
@@ -2876,7 +2877,7 @@ Réponds UNIQUEMENT en JSON valide (pas de markdown), sous forme d'un tableau :
     //  SIMULATION TAB
     // ══════════════════════════════════════════════
 
-    let simActiveModel = 'recurring';
+    let simActiveModel = 'seasonal';
     const SIM_MONTHS_AHEAD = 3;
 
     // ── Helper: get sorted unique month keys from rawData ──
@@ -2924,7 +2925,7 @@ Réponds UNIQUEMENT en JSON valide (pas de markdown), sous forme d'un tableau :
     }
 
     // ── MODEL 1: Recurring pattern (median by category) ──
-    function projectRecurring() {
+    function projectSeasonal() {
         const histMonths = getHistoricalMonths();
         const futureKeys = getFutureMonthKeys(SIM_MONTHS_AHEAD);
         const n = histMonths.length;
@@ -3035,7 +3036,7 @@ Réponds UNIQUEMENT en JSON valide (pas de markdown), sous forme d'un tableau :
 
     // ── Render projection ──
     function renderSimProjection() {
-        const proj = simActiveModel === 'recurring' ? projectRecurring() : projectWMA();
+        const proj = simActiveModel === 'seasonal' ? projectSeasonal() : projectWMA();
         const futureKeys = proj.futureKeys;
 
         // Historical months for context (last 3)
@@ -3196,6 +3197,17 @@ Réponds UNIQUEMENT en JSON valide (pas de markdown), sous forme d'un tableau :
         tbody.innerHTML = rows;
     }
 
+    // ── Model explanations ──
+    const MODEL_EXPLANATIONS = {
+        seasonal: `<strong>Modèle saisonnier</strong> — Ce modèle projette chaque catégorie en calculant la <em>médiane</em> des 6 derniers mois d'historique. Il capture le niveau « normal » de chaque poste en éliminant les valeurs extrêmes. <br><span class="sim-explain-tip">Interprétation : les projections représentent un scénario stable, sans tendance haussière ni baissière. Idéal quand votre activité est relativement constante d'un mois à l'autre.</span>`,
+        wma: `<strong>Moyennes mobiles pondérées</strong> — Ce modèle calcule une moyenne pondérée sur 6 mois (les mois récents pèsent davantage) et intègre la <em>tendance</em> observée entre les 3 derniers mois et les 3 précédents. <br><span class="sim-explain-tip">Interprétation : les projections reflètent la dynamique récente de votre trésorerie. Si vos revenus augmentent, la projection prolonge cette tendance (plafonnée à ±20% par mois). Préférez ce modèle si votre activité est en croissance ou en déclin.</span>`
+    };
+
+    function updateModelExplanation() {
+        const el = document.getElementById('sim-model-explain');
+        if (el) el.innerHTML = MODEL_EXPLANATIONS[simActiveModel] || '';
+    }
+
     // ── Model toggle ──
     document.querySelectorAll('.sim-model-btn').forEach(btn => {
         btn.addEventListener('click', () => {
@@ -3203,6 +3215,7 @@ Réponds UNIQUEMENT en JSON valide (pas de markdown), sous forme d'un tableau :
             btn.classList.add('active');
             simActiveModel = btn.dataset.model;
             renderSimProjection();
+            updateModelExplanation();
         });
     });
 
@@ -3435,10 +3448,16 @@ Réponds UNIQUEMENT en JSON valide (pas de markdown), sous forme d'un tableau :
         destroyChart('simManual');
     });
 
+    // ── Render projection tab ──
+    function renderProjectionTab() {
+        if (rawData.length === 0) return;
+        renderSimProjection();
+        updateModelExplanation();
+    }
+
     // ── Render simulation tab ──
     function renderSimulationTab() {
         if (rawData.length === 0) return;
-        renderSimProjection();
         buildSimInputs();
     }
 
