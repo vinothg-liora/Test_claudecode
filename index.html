@@ -384,52 +384,62 @@
             </div>
 
             <!-- Décaissements DIVERS -->
-            <div class="dq-section">
-                <div class="dq-section-header">
-                    <h3>Décaissements — DIVERS <span class="dq-count" id="dq-count-divers">0</span></h3>
+            <div class="dq-section dq-collapsible" data-dq-group="dec">
+                <div class="dq-section-header dq-section-toggle">
+                    <div class="dq-section-title-row">
+                        <span class="dq-chevron"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg></span>
+                        <h3>Décaissements — DIVERS <span class="dq-count" id="dq-count-divers">0</span></h3>
+                    </div>
                     <div class="dq-section-actions">
                         <button class="dq-btn-suggest-all" id="dq-suggest-divers" disabled>Suggérer tout (IA)</button>
                         <button class="dq-btn-bulk" id="dq-bulk-divers" disabled>Appliquer tout</button>
                     </div>
                 </div>
-                <div class="table-wrapper">
-                    <table class="data-table dq-table">
-                        <thead>
-                            <tr>
-                                <th>Date</th>
-                                <th class="dq-th-libelle">Libellé</th>
-                                <th class="text-right">Montant</th>
-                                <th>Suggestion IA</th>
-                                <th>Catégorie</th>
-                            </tr>
-                        </thead>
-                        <tbody id="dq-body-divers"></tbody>
-                    </table>
+                <div class="dq-section-body">
+                    <div class="table-wrapper">
+                        <table class="data-table dq-table">
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th class="dq-th-libelle">Libellé</th>
+                                    <th class="text-right">Montant</th>
+                                    <th>Suggestion IA</th>
+                                    <th>Catégorie</th>
+                                </tr>
+                            </thead>
+                            <tbody id="dq-body-divers"></tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
 
             <!-- Encaissements Autres revenus -->
-            <div class="dq-section">
-                <div class="dq-section-header">
-                    <h3>Encaissements — Autres revenus <span class="dq-count" id="dq-count-autres">0</span></h3>
+            <div class="dq-section dq-collapsible" data-dq-group="enc">
+                <div class="dq-section-header dq-section-toggle">
+                    <div class="dq-section-title-row">
+                        <span class="dq-chevron"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg></span>
+                        <h3>Encaissements — Autres revenus <span class="dq-count" id="dq-count-autres">0</span></h3>
+                    </div>
                     <div class="dq-section-actions">
                         <button class="dq-btn-suggest-all" id="dq-suggest-autres" disabled>Suggérer tout (IA)</button>
                         <button class="dq-btn-bulk" id="dq-bulk-autres" disabled>Appliquer tout</button>
                     </div>
                 </div>
-                <div class="table-wrapper">
-                    <table class="data-table dq-table">
-                        <thead>
-                            <tr>
-                                <th>Date</th>
-                                <th class="dq-th-libelle">Libellé</th>
-                                <th class="text-right">Montant</th>
-                                <th>Suggestion IA</th>
-                                <th>Catégorie</th>
-                            </tr>
-                        </thead>
-                        <tbody id="dq-body-autres"></tbody>
-                    </table>
+                <div class="dq-section-body">
+                    <div class="table-wrapper">
+                        <table class="data-table dq-table">
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th class="dq-th-libelle">Libellé</th>
+                                    <th class="text-right">Montant</th>
+                                    <th>Suggestion IA</th>
+                                    <th>Catégorie</th>
+                                </tr>
+                            </thead>
+                            <tbody id="dq-body-autres"></tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
             <!-- Learned rules section -->

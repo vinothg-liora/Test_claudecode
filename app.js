@@ -2670,9 +2670,31 @@ Réponds UNIQUEMENT en JSON valide (pas de markdown), sous forme d'un tableau :
         renderDqTable('dq-body-divers', diversRows, DEC_CATEGORIES, 'dq-bulk-divers', 'dq-suggest-divers');
         renderDqTable('dq-body-autres', autresRows, ENC_CATEGORIES, 'dq-bulk-autres', 'dq-suggest-autres');
         updateSuggestButtons();
+        wireDqCollapsible();
     }
 
     // Month filter is now driven by button clicks (toggleDqMonth, dq-select-all, dq-select-none)
+
+    // ── DQ section collapse/expand ──
+    const _dqGroupCollapsed = {};
+    let _dqCollapsibleWired = false;
+    function wireDqCollapsible() {
+        if (_dqCollapsibleWired) return;
+        document.querySelectorAll('.dq-collapsible').forEach(section => {
+            const groupId = section.dataset.dqGroup;
+            const header = section.querySelector('.dq-section-toggle');
+            if (!header) return;
+            // Restore saved state
+            if (_dqGroupCollapsed[groupId]) section.classList.add('dq-collapsed');
+            header.addEventListener('click', (e) => {
+                // Don't toggle when clicking buttons inside actions
+                if (e.target.closest('.dq-section-actions')) return;
+                section.classList.toggle('dq-collapsed');
+                _dqGroupCollapsed[groupId] = section.classList.contains('dq-collapsed');
+            });
+        });
+        _dqCollapsibleWired = true;
+    }
 
     function renderDqTable(tbodyId, rows, categories, bulkBtnId, suggestBtnId) {
         const tbody = document.getElementById(tbodyId);

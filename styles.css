@@ -1325,6 +1325,36 @@ body::before {
     justify-content: space-between;
     gap: 1rem;
 }
+
+/* ── Collapsible DQ sections ── */
+.dq-section-toggle {
+    cursor: pointer;
+    user-select: none;
+}
+.dq-section-title-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+.dq-section-title-row h3 {
+    margin: 0;
+}
+.dq-chevron {
+    display: flex;
+    align-items: center;
+    color: var(--text-muted);
+    transition: transform 0.2s;
+    flex-shrink: 0;
+}
+.dq-collapsible.dq-collapsed .dq-chevron {
+    transform: rotate(-90deg);
+}
+.dq-collapsible.dq-collapsed .dq-section-body {
+    display: none;
+}
+.dq-collapsible.dq-collapsed .dq-section-actions {
+    display: none;
+}
 .dq-btn-bulk {
     padding: 0.5rem 1.2rem;
     background: var(--accent);
