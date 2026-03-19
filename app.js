@@ -1998,6 +1998,21 @@
         }).length;
     }
 
+    // Count ALL matching transactions for a rule in the currently selected month(s)
+    // (classified or not — used to decide if a rule is relevant to show)
+    function countMatchingRowsInSelectedMonths(ruleKey, sens) {
+        return rawData.filter(r => {
+            if (r.sens !== sens) return false;
+            // Month filter
+            if (dqSelectedMonths) {
+                const mk = getDqMonthKey(r);
+                if (!mk || !dqSelectedMonths.has(mk)) return false;
+            }
+            const cleaned = cleanLibelleForLearning(normUpper(r.libelle));
+            return cleaned.includes(ruleKey) || ruleKey.includes(cleaned);
+        }).length;
+    }
+
     function applyRuleToDqRows(ruleKey, val) {
         const defaultCat = val.sens === 'Encaissement' ? 'Autres revenus' : 'DIVERS';
         let applied = 0;
@@ -2055,13 +2070,13 @@
         if (!container) return;
         const allEntries = Object.entries(_learnedCache);
 
-        // In DQ tab: only show rules that still have pending (unclassified) transactions
-        const entries = allEntries.filter(([key, val]) => countMatchingDqRows(key, val.sens) > 0);
+        // Show rules that have matching transactions in the currently selected month(s)
+        const entries = allEntries.filter(([key, val]) => countMatchingRowsInSelectedMonths(key, val.sens) > 0);
 
         if (countEl) countEl.textContent = entries.length;
         if (entries.length === 0) {
             container.innerHTML = allEntries.length > 0
-                ? '<p class="ft-empty">Toutes les règles sont appliquées. Gérez vos règles dans l\'onglet Fichiers.</p>'
+                ? '<p class="ft-empty">Aucune règle ne correspond aux transactions du mois sélectionné.</p>'
                 : '<p class="ft-empty">Aucune règle apprise.</p>';
             if (clearBtn) clearBtn.style.display = allEntries.length > 0 ? '' : 'none';
             if (validateAllBtn) validateAllBtn.style.display = 'none';
