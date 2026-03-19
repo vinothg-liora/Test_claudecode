@@ -2701,18 +2701,25 @@ Réponds UNIQUEMENT en JSON valide (pas de markdown), sous forme d'un tableau :
     // Month filter is now driven by button clicks (toggleDqMonth, dq-select-all, dq-select-none)
 
     // ── DQ section collapse/expand ──
-    const _dqGroupCollapsed = {};
+    const _dqGroupCollapsed = { dec: true, enc: true }; // collapsed by default
     let _dqCollapsibleWired = false;
     function wireDqCollapsible() {
+        // Sync collapsed state to DOM each render
+        document.querySelectorAll('.dq-collapsible').forEach(section => {
+            const groupId = section.dataset.dqGroup;
+            if (_dqGroupCollapsed[groupId]) {
+                section.classList.add('dq-collapsed');
+            } else {
+                section.classList.remove('dq-collapsed');
+            }
+        });
+
         if (_dqCollapsibleWired) return;
         document.querySelectorAll('.dq-collapsible').forEach(section => {
             const groupId = section.dataset.dqGroup;
             const header = section.querySelector('.dq-section-toggle');
             if (!header) return;
-            // Restore saved state
-            if (_dqGroupCollapsed[groupId]) section.classList.add('dq-collapsed');
             header.addEventListener('click', (e) => {
-                // Don't toggle when clicking buttons inside actions
                 if (e.target.closest('.dq-section-actions')) return;
                 section.classList.toggle('dq-collapsed');
                 _dqGroupCollapsed[groupId] = section.classList.contains('dq-collapsed');

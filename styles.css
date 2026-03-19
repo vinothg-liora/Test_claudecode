@@ -1346,6 +1346,16 @@ body::before {
     transition: transform 0.2s;
     flex-shrink: 0;
 }
+.dq-section-body {
+    max-height: 500px;
+    overflow-y: auto;
+}
+.dq-section-body .dq-table thead th {
+    position: sticky;
+    top: 0;
+    background: var(--bg-card);
+    z-index: 1;
+}
 .dq-collapsible.dq-collapsed .dq-chevron {
     transform: rotate(-90deg);
 }
