@@ -530,7 +530,7 @@
         'FRAIS VIREMENT',"FRAIS AVIS D'OPERE",'DOMICILIATION INCOMPLETE','DONT HORS TAXE','COMMISSION',
         'COMMISSIONS','PRET','INTERETS','INTERET','BPIFRANCE FINANCEMENT','TRANSACTION CARTE',
         'FRAIS DE CHANGE','CARD TRANSACTION IN FOREIGN CURRENCY','COTISATION MULTIPRO','ECART RAPPRO',
-        'BPIFRANCE','CHEQUE IMPAYE','COTISATION','FRAIS','INTERETS','SWAN - TRANSACTION',
+        'BPIFRANCE','CHEQUE IMPAYE','COTISATION','FRAIS BANCAIRE','FRAIS DE TENUE','FRAIS DE GESTION','INTERETS','SWAN - TRANSACTION',
     ];
 
     const FGS_KEYS = [
@@ -636,13 +636,13 @@
         if (/VIR\s*SEPA\s*EMIS\b.*?\/PID\s+PENNYLANE/i.test(libNorm) || FF_REGEX_PID_PENNYLANE.test(libNorm))
             return ['Formateurs / Freelances', 'Dec: PID Pennylane'];
         if (containsAnyDual(libNorm, INTERCO_DEC_KEYS)) return ['Interco', 'Dec: Interco'];
+        if (containsAnyDual(libNorm, NOTES_FRAIS_KEYS)) return ['Note de frais', 'Dec: Note de frais'];
         if (containsAnyDual(libNorm, BANQUES_DETTES_KEYS)) return ['Banques/Dettes', 'Dec: Banques/Dettes'];
         if (libNorm.includes('DGFIP') && (libNorm.includes('TS-') || libNorm.includes('TS1-')))
             return ['Taxe sur les salaires', 'Dec: DGFIP TS/TS1'];
         if (libNorm.includes('DGFIP') && libNorm.includes('PASDSN'))
             return ['Prélèvement à la source (PAS)', 'Dec: PAS'];
         if (containsAnyDual(libNorm, FGS_KEYS)) return ['Frais généraux & services', 'Dec: FGS'];
-        if (containsAnyDual(libNorm, NOTES_FRAIS_KEYS)) return ['Note de frais', 'Dec: Note de frais'];
         if (containsAnyDual(libNorm, PREVOYANCE_KEYS)) return ['Prévoyance / Mutuelle', 'Dec: Prevoyance/Mutuelle'];
         if (libNorm.includes('PLUXEE')) return ['Ticket restaurant', 'Dec: Ticket restaurant'];
         if (containsAnyDual(libNorm, SAAS_IT_KEYS)) return ['SaaS/IT', 'Dec: SaaS/IT'];
