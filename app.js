@@ -18,6 +18,13 @@
     const STORAGE_DATA_KEY = 'liora_cf_data';
     const STORAGE_FILES_KEY = 'liora_cf_files';
     const IDB_NAME = 'liora_cashflow';
+
+    // Request persistent storage so the browser doesn't evict our data
+    if (navigator.storage && navigator.storage.persist) {
+        navigator.storage.persist().then(granted => {
+            console.log('[Liora] Stockage persistant :', granted ? 'accordé' : 'refusé');
+        });
+    }
     const IDB_STORE = 'kv';
     const IDB_VERSION = 1;
 
@@ -60,6 +67,21 @@
         });
     }
 
+    // ── Toast notification for save status ──
+    function showSaveToast(message, isError) {
+        let toast = document.getElementById('liora-save-toast');
+        if (!toast) {
+            toast = document.createElement('div');
+            toast.id = 'liora-save-toast';
+            document.body.appendChild(toast);
+        }
+        toast.textContent = message;
+        toast.className = 'save-toast' + (isError ? ' save-toast-error' : ' save-toast-success');
+        toast.classList.add('save-toast-visible');
+        clearTimeout(toast._timer);
+        toast._timer = setTimeout(() => toast.classList.remove('save-toast-visible'), 3000);
+    }
+
     async function saveToStorage() {
         try {
             const serializable = rawData.map(r => {
@@ -70,9 +92,19 @@
                 };
             });
             await idbSet(STORAGE_DATA_KEY, serializable);
+            // Verify data was actually written
+            const check = await idbGet(STORAGE_DATA_KEY);
+            if (!check || check.length !== serializable.length) {
+                console.error('[Liora] Verification failed: saved', serializable.length, 'but read back', check?.length || 0);
+                showSaveToast('Erreur: données non sauvegardées correctement', true);
+                return false;
+            }
+            console.log('[Liora] Données sauvegardées:', serializable.length, 'transactions');
+            showSaveToast(serializable.length + ' transactions sauvegardées', false);
             return true;
         } catch (e) {
-            console.error('Impossible de sauvegarder dans IndexedDB:', e.message);
+            console.error('[Liora] Impossible de sauvegarder dans IndexedDB:', e.message);
+            showSaveToast('Erreur de sauvegarde: ' + e.message, true);
             return false;
         }
     }
@@ -80,12 +112,14 @@
     async function loadFromStorage() {
         try {
             const arr = await idbGet(STORAGE_DATA_KEY);
-            if (!arr) return [];
+            if (!arr) { console.log('[Liora] Aucune donnée en mémoire.'); return []; }
+            console.log('[Liora] Données chargées depuis IndexedDB:', arr.length, 'transactions');
             return arr.map(r => ({
                 ...r,
                 date: r.date ? new Date(r.date) : new Date(0),
             }));
-        } catch {
+        } catch (e) {
+            console.error('[Liora] Erreur au chargement IndexedDB:', e);
             return [];
         }
     }
@@ -751,7 +785,7 @@
         }
     }
 
-    function parseAndAnalyze(data, headers, fileName) {
+    async function parseAndAnalyze(data, headers, fileName) {
         $('#loader-status').textContent = 'Analyse des données...';
 
         const colMap = mapColumns(headers);
@@ -791,36 +825,33 @@
         });
 
         // Merge with existing historical data (async)
-        loadFromStorage().then(existingData => {
-            if (existingData.length > 0) {
-                rawData = existingData;
-            } else {
-                rawData = [];
-            }
+        const existingData = await loadFromStorage();
+        if (existingData.length > 0) {
+            rawData = existingData;
+        } else {
+            rawData = [];
+        }
 
-            const added = mergeData(rawData, newRows);
+        const added = mergeData(rawData, newRows);
 
-            // Run categorization on ALL data (re-run ensures consistency)
-            $('#loader-status').textContent = 'Catégorisation des transactions...';
-            setTimeout(async () => {
-                await loadLearnedCategories();
-                categorizeAll(rawData);
+        // Run categorization on ALL data
+        $('#loader-status').textContent = 'Catégorisation des transactions...';
+        await new Promise(r => setTimeout(r, 100)); // allow UI update
+        await loadLearnedCategories();
+        categorizeAll(rawData);
 
-                // Save merged data + file history
-                saveToStorage().then(saved => {
-                    if (saved) addFileHistory(fileName || 'fichier', added);
-                });
+        // Save merged data + file history
+        $('#loader-status').textContent = 'Sauvegarde des données...';
+        const saved = await saveToStorage();
+        if (saved) await addFileHistory(fileName || 'fichier', added);
 
-                filteredData = [...rawData];
+        filteredData = [...rawData];
 
-            $('#loader-status').textContent = `Génération du tableau de bord... (${added} nouvelles lignes ajoutées)`;
-            setTimeout(async () => {
-                buildDashboard();
-                await renderFileHistory();
-                showScreen('dashboard');
-            }, 400);
-        }, 300);
-        }); // end loadFromStorage().then
+        $('#loader-status').textContent = `Génération du tableau de bord... (${added} nouvelles lignes ajoutées)`;
+        await new Promise(r => setTimeout(r, 100)); // allow UI update
+        buildDashboard();
+        await renderFileHistory();
+        showScreen('dashboard');
     }
 
     function parseDate(str) {
@@ -1821,6 +1852,44 @@
         setTimeout(() => processFile(window._selectedFile), 500);
     });
 
+    // ── Manual Save Button ──
+    $('#ft-manual-save').addEventListener('click', async () => {
+        if (rawData.length === 0) {
+            showSaveToast('Aucune donnée à sauvegarder', true);
+            return;
+        }
+        const saved = await saveToStorage();
+        if (saved) updateStorageStatus();
+    });
+
+    // ── Storage status indicator ──
+    async function updateStorageStatus() {
+        const dot = document.getElementById('storage-status-dot');
+        const text = document.getElementById('storage-status-text');
+        if (!dot || !text) return;
+        try {
+            const stored = await idbGet(STORAGE_DATA_KEY);
+            const count = stored ? stored.length : 0;
+            const learnedCount = Object.keys(_learnedCache).length;
+            if (count > 0) {
+                dot.className = 'storage-status-dot';
+                text.textContent = `${count} transactions et ${learnedCount} règles apprises sauvegardées dans IndexedDB`;
+            } else {
+                dot.className = 'storage-status-dot offline';
+                text.textContent = 'Aucune donnée stockée';
+            }
+            // Show storage estimate if available
+            if (navigator.storage && navigator.storage.estimate) {
+                const est = await navigator.storage.estimate();
+                const usedMB = (est.usage / (1024 * 1024)).toFixed(1);
+                text.textContent += ` — ${usedMB} Mo utilisés`;
+            }
+        } catch (e) {
+            dot.className = 'storage-status-dot offline';
+            text.textContent = 'Erreur IndexedDB: ' + e.message;
+        }
+    }
+
     // ── Clear All History ──
     $('#ft-clear-all').addEventListener('click', async () => {
         if (!confirm('Supprimer tout l\'historique des données importées ?')) return;
@@ -2307,17 +2376,21 @@
 
     // ── Auto-load from IndexedDB on startup ──
     (async function autoLoad() {
+        console.log('[Liora] Démarrage — chargement des données persistées...');
         await migrateFromLocalStorage();
         await loadLearnedCategories();
         const stored = await loadFromStorage();
         if (stored.length > 0) {
+            console.log('[Liora] Restauration de', stored.length, 'transactions depuis IndexedDB');
             rawData = stored;
             categorizeAll(rawData);
             filteredData = [...rawData];
             buildDashboard();
             await renderFileHistory();
             showScreen('dashboard');
+            showSaveToast(stored.length + ' transactions restaurées', false);
         } else {
+            console.log('[Liora] Aucune donnée trouvée dans IndexedDB');
             await renderFileHistory();
         }
     })();
@@ -2336,7 +2409,7 @@
             if (btn.dataset.tab === 'dataquality') { renderDataQuality(); renderLearnedRules(); }
             if (btn.dataset.tab === 'projection') renderProjectionTab();
             if (btn.dataset.tab === 'simulation') renderSimulationTab();
-            if (btn.dataset.tab === 'fichiers') { renderFileHistory(); renderRulesRecap(); }
+            if (btn.dataset.tab === 'fichiers') { renderFileHistory(); renderRulesRecap(); updateStorageStatus(); }
         });
     });
 

@@ -2388,3 +2388,65 @@ body::before {
     font-size: 0.72rem;
     padding: 0.15rem 0.4rem;
 }
+
+/* ── Save toast notification ── */
+.save-toast {
+    position: fixed;
+    bottom: 1.5rem;
+    right: 1.5rem;
+    padding: 0.6rem 1.2rem;
+    border-radius: var(--radius-sm);
+    font-size: 0.82rem;
+    font-weight: 500;
+    z-index: 9999;
+    opacity: 0;
+    transform: translateY(10px);
+    transition: opacity 0.3s, transform 0.3s;
+    pointer-events: none;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+.save-toast-visible {
+    opacity: 1;
+    transform: translateY(0);
+}
+.save-toast-success {
+    background: #059669;
+    color: #fff;
+}
+.save-toast-error {
+    background: #dc2626;
+    color: #fff;
+}
+
+/* ── Storage status indicator ── */
+.storage-status {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    padding: 0.5rem 0;
+}
+.storage-status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #059669;
+    flex-shrink: 0;
+}
+.storage-status-dot.offline {
+    background: #dc2626;
+}
+.ft-manual-save-btn {
+    background: var(--accent-color);
+    color: #fff;
+    border: none;
+    border-radius: var(--radius-sm);
+    padding: 0.4rem 1rem;
+    font-size: 0.8rem;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+.ft-manual-save-btn:hover {
+    filter: brightness(1.1);
+}
