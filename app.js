@@ -124,9 +124,22 @@
         }
     }
 
+    const _seedFileHistory = [
+        {name:'PENNYLANE_DATASCIENTEST_Transactions_bancaires.xlsx',rowCount:1178,date:'2026-04-09T09:18:59.763Z'},
+        {name:'Transactions_bancaires_pennylane_consolidees.xlsx',rowCount:15447,date:'2026-04-09T09:22:09.671Z'},
+        {name:'Transactions_bancaires_pennylane_septembre_2025_categorisees_vf.xlsx',rowCount:1,date:'2026-04-09T09:22:19.179Z'},
+        {name:'Transactions_bancaires_pennylane_octobre_2025_categorisees_vf.xlsx',rowCount:22,date:'2026-04-09T09:22:29.773Z'},
+        {name:'PENNYLANE_DATASCIENTEST_Transactions_bancaires (1).xlsx',rowCount:1629,date:'2026-04-09T09:27:20.021Z'},
+    ];
+
     async function getFileHistory() {
         try {
-            const h = await idbGet(STORAGE_FILES_KEY);
+            let h = await idbGet(STORAGE_FILES_KEY);
+            if ((!h || h.length === 0) && _seedFileHistory.length > 0) {
+                h = JSON.parse(JSON.stringify(_seedFileHistory));
+                await idbSet(STORAGE_FILES_KEY, h);
+                console.log('[Liora] Historique fichiers par défaut chargé:', h.length, 'fichiers');
+            }
             return h || [];
         } catch { return []; }
     }
@@ -2629,7 +2642,12 @@
     (async function loadApiKey() {
         try {
             const key = await idbGet('liora_api_key');
-            if (key) $('#dq-api-key').value = key;
+            if (key) {
+                $('#dq-api-key').value = key;
+            } else {
+                // First launch: prompt user to enter API key
+                console.log('[Liora] Aucune clé API trouvée. Renseignez-la dans l\'onglet Fichiers.');
+            }
         } catch {}
     })();
     $('#dq-api-key').addEventListener('change', async () => {
