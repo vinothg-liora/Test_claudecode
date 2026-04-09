@@ -759,9 +759,9 @@
         });
 
         data.forEach(row => {
-            if (row.manualCategory) return;
             if (FF_REGEX_PID_PENNYLANE.test(row._libNorm)) {
                 row.categorie = 'Formateurs / Freelances';
+                row.manualCategory = '';
                 row.ruleHit = 'Post-fix: FF (PID PENNYLANE)';
             }
         });
