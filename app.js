@@ -610,7 +610,7 @@
     const AUTRES_IMPOTS_KEYS = ['CVAE','TAXE FONCIERE','CFE'];
 
     const FF_REGEX_PENNYLANE = /\bPENNYLANE-[A-Z0-9]+\b/;
-    const FF_REGEX_PID_PENNYLANE = /\bPID\s+PENNYLANE\b/;
+    const FF_REGEX_PID_PENNYLANE = /\bPID\s+PENNYLANE/;
 
     // ── FILIZ special case ──
     function isFilizB2B(tiersNorm, libNorm) {
@@ -632,8 +632,8 @@
 
     // ── Décaissements categorization ──
     function categoriseDec(libNorm) {
-        // Priority: VIR SEPA EMIS /PID PENNYLANE → Formateurs / Freelances
-        if (/VIR\s*SEPA\s*EMIS\b.*?\/PID\s+PENNYLANE/i.test(libNorm))
+        // Priority: VIR SEPA EMIS ... /PID PENNYLANE → Formateurs / Freelances
+        if (/VIR\s*SEPA\s*EMIS\b.*?\/PID\s+PENNYLANE/i.test(libNorm) || FF_REGEX_PID_PENNYLANE.test(libNorm))
             return ['Formateurs / Freelances', 'Dec: PID Pennylane'];
         if (containsAnyDual(libNorm, INTERCO_DEC_KEYS)) return ['Interco', 'Dec: Interco'];
         if (containsAnyDual(libNorm, BANQUES_DETTES_KEYS)) return ['Banques/Dettes', 'Dec: Banques/Dettes'];
