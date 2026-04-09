@@ -632,6 +632,9 @@
 
     // ── Décaissements categorization ──
     function categoriseDec(libNorm) {
+        // Priority: VIR SEPA EMIS /PID PENNYLANE → Formateurs / Freelances
+        if (/VIR\s*SEPA\s*EMIS\b.*?\/PID\s+PENNYLANE/i.test(libNorm))
+            return ['Formateurs / Freelances', 'Dec: PID Pennylane'];
         if (containsAnyDual(libNorm, INTERCO_DEC_KEYS)) return ['Interco', 'Dec: Interco'];
         if (containsAnyDual(libNorm, BANQUES_DETTES_KEYS)) return ['Banques/Dettes', 'Dec: Banques/Dettes'];
         if (libNorm.includes('DGFIP') && (libNorm.includes('TS-') || libNorm.includes('TS1-')))
