@@ -1,0 +1,40 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/spfx-build/package-solution.schema.json",
+  "solution": {
+    "name": "liora-cashflow-webpart-client-side-solution",
+    "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    "version": "1.0.0.0",
+    "includeClientSideAssets": true,
+    "skipFeatureDeployment": true,
+    "isDomainIsolated": false,
+    "developer": {
+      "name": "Liora",
+      "websiteUrl": "",
+      "privacyUrl": "",
+      "termsOfUseUrl": "",
+      "mpnId": "Undefined-1.18.2"
+    },
+    "metadata": {
+      "shortDescription": {
+        "default": "Liora Cash Flow Analyzer"
+      },
+      "longDescription": {
+        "default": "Analyseur de trésorerie avec catégorisation automatique, projections et simulations."
+      },
+      "screenshotPaths": [],
+      "videoUrl": "",
+      "categories": []
+    },
+    "features": [
+      {
+        "title": "Liora Cash Flow Analyzer",
+        "description": "Web Part d'analyse de trésorerie Liora",
+        "id": "b2c3d4e5-f6a7-8901-bcde-f12345678901",
+        "version": "1.0.0.0"
+      }
+    ]
+  },
+  "paths": {
+    "zippedPackage": "solution/liora-cashflow.sppkg"
+  }
+}

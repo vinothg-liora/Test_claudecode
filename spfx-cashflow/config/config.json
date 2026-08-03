@@ -1,0 +1,36 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/spfx-build/config.2.0.schema.json",
+  "version": "2.0",
+  "bundles": {
+    "liora-cash-flow-web-part": {
+      "components": [
+        {
+          "entrypoint": "./lib/webparts/lioraCashFlow/LioraCashFlowWebPart.js",
+          "manifest": "./src/webparts/lioraCashFlow/LioraCashFlowWebPart.manifest.json"
+        }
+      ]
+    }
+  },
+  "externals": {
+    "chartjs": {
+      "path": "https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js",
+      "globalName": "Chart"
+    },
+    "chartjs-treemap": {
+      "path": "https://cdn.jsdelivr.net/npm/chartjs-chart-treemap@2.3.0/dist/chartjs-chart-treemap.min.js",
+      "globalName": "ChartTreemap",
+      "globalDependencies": ["chartjs"]
+    },
+    "papaparse": {
+      "path": "https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js",
+      "globalName": "Papa"
+    },
+    "xlsx": {
+      "path": "https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js",
+      "globalName": "XLSX"
+    }
+  },
+  "localizedResources": {
+    "LioraCashFlowWebPartStrings": "lib/webparts/lioraCashFlow/loc/{locale}.js"
+  }
+}
